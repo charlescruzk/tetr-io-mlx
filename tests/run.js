@@ -156,6 +156,19 @@ test('O piece rotation states are all identical (no visible rotation)', () => {
   }
 });
 
+test('getCells applies the (x, y) offset to every cell', () => {
+  const cells = Piece.getCells('T', 0, 3, 5);
+   // T spawn is (1,0),(0,1),(1,1),(2,1) -> offset by (3,5)
+  const sorted = cells.slice().map((c) => c.slice().sort()).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const expected = [[3, 6], [4, 5], [4, 6], [5, 6]].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  assertEqual(JSON.stringify(sorted), JSON.stringify(expected), 'T spawn offset by (3,5) mismatch');
+});
+
+test('each piece has a distinct shape (no two types share the same spawn)', () => {
+  const sig = Piece.TYPES.map((t) => JSON.stringify(Piece.getCells(t, 0, 0, 0).slice().sort()));
+  assertEqual(new Set(sig).size, 7, 'all 7 pieces should have distinct spawn shapes');
+});
+
 // TODO(qwen, Phase 4b): SRS wall kick tests, e.g. a T piece rotating
 // against a wall should succeed via a kick where naive rotation would
 // collide. Add them here once Piece.getKicks is implemented (or note in

@@ -5,43 +5,68 @@
 // Dual-export: loadable via <script> in the browser (attaches to
 // window.Tetris.Piece) and via require() in Node for tests/run.js.
 (function (root) {
-  'use strict';
+    'use strict';
 
-  const Piece = {
-    TYPES: ['I', 'O', 'T', 'S', 'Z', 'J', 'L'],
+     // The 7 tetromino types. Enumerated up front so the SHAPES builder below
+     // can iterate before the Piece object is materialized.
+    const TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
 
-    // TODO(qwen, Phase 2): shape data for all 7 tetrominoes, 4 rotation
-    // states each (index 0 = spawn, 1 = R (clockwise once), 2 = 180, 3 = L
-    // (counter-clockwise once) — standard SRS naming). Each state is 4
-    // [x, y] cells relative to a consistent per-piece origin. O piece's 4
-    // states should all be identical (it doesn't visually rotate).
-    SHAPES: {
-      // I: [...], O: [...], T: [...], S: [...], Z: [...], J: [...], L: [...]
-    },
+     // Spawn orientations, expressed as [x, y] cells in a per-piece bounding
+     // box with origin at the box's top-left. Rotations R (1), 180 (2), L (3)
+     // are generated below by repeatedly rotating the spawn state 90° clockwise,
+     // so every piece's 4 states are true, consistent rotations of one another.
+    const SPAWN = {
+      I: [[0, 1], [1, 1], [2, 1], [3, 1]], // 4x4 box, horizontal in row 1
+      O: [[0, 0], [1, 0], [0, 1], [1, 1]], // 2x2 box
+      T: [[1, 0], [0, 1], [1, 1], [2, 1]], // 3x3 box, pointing up
+      S: [[1, 0], [2, 0], [0, 1], [1, 1]],
+      Z: [[0, 0], [1, 0], [1, 1], [2, 1]],
+      J: [[0, 0], [0, 1], [1, 1], [2, 1]],
+      L: [[2, 0], [0, 1], [1, 1], [2, 1]],
+      };
+    const BOX = { I: 4, O: 2, T: 3, S: 3, Z: 3, J: 3, L: 3 };
 
-    // getCells(type, rotation, x, y)
-    //   type: one of Piece.TYPES. rotation: 0-3. x, y: board offset.
-    //   Returns 4 [x, y] absolute board cells for that piece+rotation+pos.
-    getCells(type, rotation, x, y) {
-      throw new Error('Piece.getCells not implemented — see PLAN.md Phase 2');
-    },
+     // 90° clockwise rotation within a `box`-sized grid (y increases downward):
+     // (x, y) -> (box - 1 - y, x).
+    function rotateCW(cells, box) {
+      return cells.map(([x, y]) => [box - 1 - y, x]);
+      }
 
-    // TODO(qwen, Phase 4b): wall kick tables.
-    // KICKS_JLSTZ: standard 5-point offset table per rotation transition
-    // KICKS_I: separate table for the I piece
-    // getKicks(type, fromRotation, toRotation) -> array of [dx, dy] to try
-    // in order after the naive rotation fails Board.collides.
-    KICKS_JLSTZ: {},
-    KICKS_I: {},
-    getKicks(type, fromRotation, toRotation) {
-      throw new Error('Piece.getKicks not implemented — see PLAN.md Phase 4b');
-    },
-  };
+     // Build SHAPES[type] = [state0, state1, state2, state3], each a list of 4
+     // [x, y] cells. The O piece is rotation-invariant (its 2x2 maps onto
+     // itself), so all 4 of its states are identical.
+    const SHAPES = {};
+    for (const type of TYPES) {
+      const box = BOX[type];
+      const states = [SPAWN[type].map((c) => c.slice())];
+      for (let r = 1; r < 4; r++) {
+        states[r] = rotateCW(states[r - 1], box);
+        }
+      SHAPES[type] = states;
+      }
 
-  if (typeof module !== 'undefined' && module.exports) {
-    module.exports = Piece;
-  } else {
-    root.Tetris = root.Tetris || {};
-    root.Tetris.Piece = Piece;
-  }
+    const Piece = {
+      TYPES: TYPES,
+
+        // Shape data for all 7 tetrominoes, 4 rotation states each
+        // (index 0 = spawn, 1 = R, 2 = 180, 3 = L — standard SRS naming).
+      SHAPES: SHAPES,
+
+        // getCells(type, rotation, x, y)
+        //   type: one of Piece.TYPES. rotation: 0-3. x, y: board offset.
+        //   Returns 4 [x, y] absolute board cells for that piece+rotation+pos.
+      getCells(type, rotation, x, y) {
+        const states = SHAPES[type];
+        if (!states) throw new Error('unknown piece type: ' + type);
+        const state = states[((rotation % 4) + 4) % 4];
+        return state.map((c) => [c[0] + x, c[1] + y]);
+        },
+      };
+
+    if (typeof module !== 'undefined' && module.exports) {
+      module.exports = Piece;
+      } else {
+      root.Tetris = root.Tetris || {};
+      root.Tetris.Piece = Piece;
+      }
 })(typeof window !== 'undefined' ? window : globalThis);
