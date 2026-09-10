@@ -1,0 +1,61 @@
+/* Design tokens — dark/neon, tetr.io-inspired. See SPEC.md "Visual style".
+   Layout, per-screen styling, and animation are Phase 9/11 work — this
+   file only fixes the palette and a minimal reset so everything built on
+   top starts from the same tokens. */
+
+:root {
+  --bg: #0e0f1a;
+  --surface: #171826;
+  --surface-raised: #1f2136;
+  --accent: #7c5cff;
+  --accent-2: #33e0ff;
+  --text: #e8e8f0;
+  --text-dim: #9090a8;
+  --danger: #ff4d6d;
+
+  --piece-i: #33e0ff;
+  --piece-o: #ffd93d;
+  --piece-t: #b57cff;
+  --piece-s: #3ddc84;
+  --piece-z: #ff5a5a;
+  --piece-j: #4d7bff;
+  --piece-l: #ff9f43;
+
+  --transition-fast: 150ms ease;
+  --transition-med: 250ms ease;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+}
+
+.screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--transition-med);
+}
+
+.hidden {
+  display: none;
+}
+
+/* TODO(qwen, Phase 9 & 11): per-screen layout, HUD, buttons, canvas
+   sizing/positioning, line-clear/hard-drop animation, screen transitions.
+   Keep using the CSS variables above rather than hardcoding new colors. */

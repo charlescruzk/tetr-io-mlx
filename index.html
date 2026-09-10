@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tetris IO MLX</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Screen: Home (see SPEC.md screen 1, PLAN.md Phase 9) -->
+  <div id="screen-home" class="screen">
+    <!-- TODO(qwen, Phase 9): title/logo, Play button, Settings button, version/credits line -->
+  </div>
+
+  <!-- Screen: Mode Select (see SPEC.md screen 2) -->
+  <div id="screen-mode-select" class="screen hidden">
+    <!-- TODO(qwen, Phase 9): Classic / Marathon / 40 Line Sprint cards, difficulty selector, Back -->
+  </div>
+
+  <!-- Screen: In-game (see SPEC.md screen 3) -->
+  <div id="screen-game" class="screen hidden">
+    <canvas id="board-canvas"></canvas>
+    <canvas id="hold-canvas"></canvas>
+    <canvas id="next-canvas"></canvas>
+    <div id="hud">
+      <!-- TODO(qwen, Phase 9): score/lines/level/time, appropriate per mode -->
+    </div>
+  </div>
+
+  <!-- Screen: Pause overlay (see SPEC.md screen 4) -->
+  <div id="screen-pause" class="screen hidden">
+    <!-- TODO(qwen, Phase 9): Resume, Restart, Settings, Quit to Main Menu -->
+  </div>
+
+  <!-- Screen: Settings (see SPEC.md screen 5) -->
+  <div id="screen-settings" class="screen hidden">
+    <!-- TODO(qwen, Phase 9): Music on/off, SFX on/off, Back (context-aware: Home or Pause) -->
+  </div>
+
+  <!-- Screen: Game Over / results (see SPEC.md screen 6) -->
+  <div id="screen-gameover" class="screen hidden">
+    <!-- TODO(qwen, Phase 9): final stats, Retry, Main Menu -->
+  </div>
+
+  <!--
+    Script load order matters — these are plain (non-module) scripts so the
+    game runs from file:// with no server. Pure-logic files (board/piece/
+    randomizer/scoring/modes) attach to window.Tetris.*; game/render/input/
+    audio/ui/main are browser-only and depend on the pure-logic files being
+    loaded first. Don't reorder without checking PLAN.md for what depends
+    on what.
+  -->
+  <script src="js/board.js"></script>
+  <script src="js/piece.js"></script>
+  <script src="js/randomizer.js"></script>
+  <script src="js/scoring.js"></script>
+  <script src="js/modes.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
