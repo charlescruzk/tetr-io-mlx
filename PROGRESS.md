@@ -5,12 +5,13 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 0 done
+## Status: Phase 1 done
 
 ## Phase checklist
 
 - [x] Phase 0 — Scaffold (node -c clean on all 11 js/ files)
-- [ ] Phase 1 — Board model
+- [x] Phase 1 — Board model (all Board tests pass; suite's 4 remaining
+      failures are the Phase 2/3 Piece + Randomizer tests, resolved next)
 - [ ] Phase 2 — Pieces
 - [ ] Phase 3 — Randomizer
 - [ ] Phase 4a — Basic rotation + gravity + movement

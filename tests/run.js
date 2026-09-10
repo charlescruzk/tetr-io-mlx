@@ -88,6 +88,54 @@ test('Board.findFullRows ignores a row that is full except one cell', () => {
   assertEqual(full.length, 0, 'a row missing one cell should not be flagged full');
 });
 
+test('Board.collides flags a piece resting exactly on the floor', () => {
+  const board = Board.create();
+  const floor = Board.HEIGHT + Board.BUFFER - 1; // last valid row
+  const inBoard = [[0, floor], [1, floor], [2, floor], [3, floor]];
+  assert(!Board.collides(board, inBoard, 0, 0), 'a piece on the floor row should fit');
+  const belowFloor = [[0, floor + 1], [1, floor + 1], [2, floor + 1], [3, floor + 1]];
+  assert(Board.collides(board, belowFloor, 0, 0), 'one row below the floor should collide');
+});
+
+test('Board.lock writes the piece type into the occupied cells', () => {
+  const board = Board.create();
+  const cells = [[0, 0], [1, 0], [2, 0], [3, 0]];
+  Board.lock(board, cells, 0, 0, 'I');
+  for (let x = 0; x < 4; x++) assertEqual(board[0][x], 'I');
+  assert(board[0][4] === null, 'cells outside the piece stay empty');
+  assert(board[1][0] === null, 'untouched rows stay empty');
+});
+
+test('Board.clearRows collapses multiple full rows at once', () => {
+  const board = Board.create();
+  const bottom = Board.HEIGHT + Board.BUFFER - 1;
+  for (let x = 0; x < Board.WIDTH; x++) {
+    board[bottom][x] = 'I';
+    board[bottom - 1][x] = 'O';
+   }
+  const full = Board.findFullRows(board);
+  assertEqual(full.length, 2, 'expected two full rows');
+  Board.clearRows(board, full);
+  assertEqual(board.length, Board.HEIGHT + Board.BUFFER, 'height unchanged after clear');
+  // the two bottom rows are now empty, and nothing else moved into a full state
+  assert(board[bottom].every((c) => c === null), 'new bottom row empty');
+  assert(board[bottom - 1].every((c) => c === null), 'row above new bottom empty');
+});
+
+test('Board.collides treats the spawn buffer as open space', () => {
+  const board = Board.create();
+  // a cell placed in the buffer above row 0 must not collide on an empty board
+  const above = [[0, -1], [1, -1], [2, -1], [3, -1]];
+  assert(!Board.collides(board, above, 0, 0), 'buffer cells should not collide');
+});
+
+test('Board.reset clears every cell', () => {
+  const board = Board.create();
+  Board.lock(board, [[0, 0], [1, 0], [2, 0], [3, 0]], 0, 0, 'I');
+  Board.reset(board);
+  assert(board.every((row) => row.every((c) => c === null)), 'board should be all-null after reset');
+});
+
 // ---------------------------------------------------------------- Phase 2
 // Piece
 
