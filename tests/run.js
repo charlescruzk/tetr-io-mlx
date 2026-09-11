@@ -618,6 +618,20 @@ function installDomStubs() {
     return c;
     });
 
+  // Phase 14: the touch-control markup (one button per action, like
+  // index.html). touch.js discovers them via a per-element querySelectorAll.
+  byId['touch-controls'] = makeEl('touch-controls');
+  const touchButtons = ['left', 'right', 'soft', 'cw', 'ccw', 'hard', 'hold']
+    .map((a) => {
+      const b = makeEl('tbtn-' + a);
+      b.dataset.action = a;
+      byId['touch-controls'].children.push(b);
+      return b;
+      });
+  byId['touch-controls'].querySelectorAll =
+    (sel) => (sel === '[data-action]' ? touchButtons : []);
+  byId['btn-pause-touch'] = makeEl('btn-pause-touch');
+
   const doc = {
     readyState: 'complete',
     body: makeEl('body'),
@@ -646,6 +660,18 @@ function installDomStubs() {
       },
     // main.js's rAF callback, if boot() scheduled one.
     runFrame: (ts) => { if (rafCb) rafCb(ts); },
+    // Fire a synthetic touchstart/touchend on a button (touch.js registers
+    // its listeners there; real touch semantics stay a human check).
+    touchStart: (el) => {
+      for (const fn of (el.listeners.touchstart || [])) {
+        fn({ preventDefault: () => {} });
+        }
+      },
+    touchEnd: (el) => {
+      for (const fn of (el.listeners.touchend || [])) {
+        fn({ preventDefault: () => {} });
+        }
+      },
     };
   }
 
@@ -665,6 +691,8 @@ const dom = installDomStubs();
 // globalThis — otherwise the UI would see a namespace with no Input/Game.
 global.window.Tetris = global.Tetris;
 require(path.join(__dirname, '..', 'js', 'ui.js'));
+// Phase 14: touch.js before main.js so boot()'s Touch.init() finds it.
+require(path.join(__dirname, '..', 'js', 'touch.js'));
 // ui.js attaches window.Tetris.UI rather than module.exports, so grab the
 // object off the namespace.
 const UI = global.Tetris.UI;
@@ -708,6 +736,64 @@ test('one rAF frame runs cleanly with a live game', () => {
   dom.runFrame(0);
   dom.runFrame(500);
   dom.runFrame(1600);
+  });
+
+// ---------------------------------------------------------------- Phase 14
+// Touch layer (js/touch.js) — the dispatch/repeat logic runs in Node with
+// the same DOM stubs. Real touch-event semantics stay a human check.
+
+const Touch = global.Tetris.Touch;
+const tbtn = (action) => dom.byId['touch-controls'].children
+  .find((b) => b.dataset.action === action);
+
+test('touch: buttons are bound and enabled once a game is live', () => {
+  for (const a of ['left', 'right', 'soft', 'cw', 'ccw', 'hard', 'hold']) {
+    assert((tbtn(a).listeners.touchstart || []).length >= 1,
+      `${a} touch button should have a touchstart listener`);
+    assert((tbtn(a).listeners.touchend || []).length >= 1,
+      `${a} touch button should have a touchend listener`);
+    }
+  assert(Touch._enabled === true, 'touch layer should be enabled in-game');
+  assert(Touch._g === UI.game, 'touch layer should point at the live game');
+  });
+
+test('touch: a rotate press rotates the piece (same action surface)', () => {
+  const g = UI.game;
+  if (g.current.type !== 'O') {
+    const before = g.current.rotation;
+    dom.touchStart(tbtn('cw'));
+    assertEqual(g.current.rotation, (before + 1) % 4, 'cw press should rotate');
+    }
+  dom.touchEnd(tbtn('cw'));
+  });
+
+test('touch: soft drop repeats on the DAS/ARR schedule and stops on release', () => {
+  const g = UI.game;
+  const scoreBefore = g.score;
+  dom.touchStart(tbtn('soft')); // immediate first fire
+  const afterFirst = g.score;
+  assert(afterFirst > scoreBefore, 'soft-drop press should score immediately');
+  // Before DAS elapses: no repeat yet.
+  Touch._loop(performance.now() + Touch.DAS - 1);
+  assertEqual(g.score, afterFirst, 'no repeat before DAS elapses');
+  // Past DAS: the repeat fires.
+  Touch._loop(performance.now() + Touch.DAS + 1);
+  assert(g.score > afterFirst, 'a repeat should fire after DAS');
+  // Release: no further repeats.
+  dom.touchEnd(tbtn('soft'));
+  const afterRelease = g.score;
+  Touch._loop(performance.now() + Touch.DAS * 3);
+  assertEqual(g.score, afterRelease, 'no repeat after release');
+  });
+
+test('touch: presses are no-ops when the layer is disabled', () => {
+  const g = UI.game;
+  Touch.setEnabled(false);
+  const rotation = g.current.rotation;
+  dom.touchStart(tbtn('cw'));
+  dom.touchEnd(tbtn('cw'));
+  assertEqual(g.current.rotation, rotation, 'a disabled press must do nothing');
+  UI._syncInput(); // restore enabled state for any later tests
   });
 
 test('a failed boot() renders a visible on-page error (hardening check)', () => {

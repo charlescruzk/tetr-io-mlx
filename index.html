@@ -67,6 +67,8 @@
         <div class="panel-label">Next</div>
         <canvas id="next-canvas"></canvas>
         <div id="hud" class="hud">
+          <!-- Phase 14: one-tap pause in the mobile HUD (touch-only via CSS). -->
+          <button id="btn-pause-touch" class="btn btn-ghost touch-pause" aria-label="Pause">Pause</button>
           <div class="stat" id="stat-score">
             <span class="stat-label">Score</span>
             <span class="stat-value" id="val-score">0</span>
@@ -86,9 +88,25 @@
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Screen: Pause overlay (SPEC.md screen 4) -->
+    <!-- Phase 14: on-screen touch controls (touch-only via CSS; hidden on
+         pointer devices that have hover). Buttons carry data-action, which
+         js/touch.js dispatches to the same game action surface input.js
+         uses. Row 1 is movement; row 2 is actions, Rotate CW primary. -->
+    <div id="touch-controls" class="touch-controls">
+      <div class="touch-row">
+        <button class="tbtn" data-action="left" aria-label="Move left">&#8592;</button>
+        <button class="tbtn tbtn-wide" data-action="soft" aria-label="Soft drop">&#8595;</button>
+        <button class="tbtn" data-action="right" aria-label="Move right">&#8594;</button>
+      </div>
+      <div class="touch-row">
+        <button class="tbtn tbtn-small" data-action="hold" aria-label="Hold">Hold</button>
+        <button class="tbtn" data-action="ccw" aria-label="Rotate counter-clockwise">&#8634;</button>
+        <button class="tbtn tbtn-primary" data-action="cw" aria-label="Rotate clockwise">&#8635;</button>
+        <button class="tbtn tbtn-small" data-action="hard" aria-label="Hard drop">Drop</button>
+      </div>
+    </div>
+  </div>
   <div id="screen-pause" class="screen overlay hidden">
     <div class="screen-inner overlay-inner">
       <h2 class="screen-title">Paused</h2>
@@ -147,6 +165,7 @@
   <script src="js/game.js"></script>
   <script src="js/render.js"></script>
   <script src="js/input.js"></script>
+  <script src="js/touch.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/main.js"></script>

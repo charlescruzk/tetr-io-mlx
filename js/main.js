@@ -52,6 +52,9 @@
   function boot() {
     try {
       T.UI.init();
+      // Phase 14: wire the touch controls (a no-op where the markup or the
+      // device doesn't have them).
+      if (T.Touch && T.Touch.init) T.Touch.init();
       requestAnimationFrame(frame);
       } catch (err) {
       // Phase 13 hardening: a failed init used to leave a silently dead page

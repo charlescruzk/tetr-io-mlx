@@ -441,3 +441,152 @@ body {
   .game-layout { flex-wrap: wrap; justify-content: center; }
   .logo { font-size: 44px; }
 }
+
+/* ---- Phase 14: touch devices ----
+   Gated on (hover: none) and (pointer: coarse), NOT a width check: a touch
+   laptop keeps the desktop layout, a narrow desktop window keeps keyboard
+   controls (SPEC "Mobile & touch"). Two parts:
+   1. Touch controls + the HUD pause button are display:none by default and
+      shown only here.
+   2. Every screen reflows to phone width: full-width buttons, ~44px touch
+      targets, no horizontal overflow. The game screen stacks vertically
+      (HUD row -> board -> hold+next -> touch controls) via a grid plus
+      display:contents on the side panels, which promotes the nested
+      hold/next canvases and the HUD to direct grid items. */
+
+.touch-controls,
+.touch-pause {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* Show the touch-only controls. */
+  .touch-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 12px 14px;
+    }
+  .touch-pause { display: inline-block; }
+
+  .touch-row {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    }
+
+  .tbtn {
+    flex: 1 1 0;
+    min-width: 44px;
+    min-height: 56px;
+    appearance: none;
+    border: 1px solid rgba(124, 92, 255, 0.45);
+    background: var(--surface-raised);
+    color: var(--text);
+    font-size: 22px;
+    font-weight: 700;
+    border-radius: 12px;
+    touch-action: none;          /* held buttons must not scroll/zoom the page */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    }
+  .tbtn:active {
+    background: var(--accent);
+    color: #fff;
+    }
+  .tbtn-primary {
+    background: linear-gradient(180deg, var(--accent), #5f3fe0);
+    border-color: var(--accent);
+    color: #fff;
+    }
+  .tbtn-small {
+    font-size: 14px;
+    letter-spacing: 1px;
+    }
+
+  /* --- in-game: stack vertically, HUD above the board --- */
+  .game-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto 1fr;
+    grid-template-areas:
+      "hud hud"
+      "board board"
+      "hold next"
+      "touch touch";
+    align-content: start;
+    gap: 12px;
+    padding: 12px;
+    }
+  #screen-game { overflow-y: auto; } /* safety valve on very short screens */
+   /* Promote the panels' children (label/canvas/hud) to grid items so the
+      HUD can sit above the board without restructuring the shared DOM. */
+  .side-hold,
+  .side-next { display: contents; }
+  .side-hold .panel-label,
+  .side-next .panel-label { display: none; }
+
+  #hud {
+    grid-area: hud;
+    flex-direction: row;
+    justify-content: center;
+    align-items: stretch;
+    margin-top: 0;
+    }
+   /* Stat tiles share the row (up to 4 + pause) instead of overflowing. */
+  #hud .stat {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 10px;
+    }
+  #hud .stat-value { font-size: 16px; }
+   /* HUD pause button: inline with the stat tiles. */
+  .touch-pause {
+    flex: 0 0 auto;
+    align-self: center;
+    margin-left: 8px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    }
+
+  #board-canvas {
+    grid-area: board;
+    display: block;
+    margin: 0 auto;
+    /* Scale to fit: the canvas is 300x600 (1:2). Cap by both width and
+       height so a phone gets the biggest board the screen allows without
+       ever causing horizontal scroll. */
+    height: min(52vh, 560px);
+    max-width: calc(100vw - 24px);
+    width: auto;
+    }
+
+  #hold-canvas {
+    grid-area: hold;
+    justify-self: end;
+    height: 88px;
+    width: auto;
+    }
+  #next-canvas {
+    grid-area: next;
+    justify-self: start;
+    height: 88px;
+    width: auto;
+    }
+
+  #touch-controls { grid-area: touch; }
+
+  /* --- menus: full-width, roomy touch targets --- */
+  .screen-inner { padding: 24px 16px; gap: 20px; }
+  .menu-buttons { width: 100%; max-width: 340px; }
+  .btn { min-height: 44px; padding: 12px 20px; }
+  .seg-btn { min-height: 44px; padding: 10px 18px; }
+  .toggle { min-height: 44px; }
+  .mode-cards { grid-template-columns: 1fr; gap: 12px; }
+  .mode-card { padding: 16px; }
+  .overlay-inner { padding: 24px 20px; max-height: 92vh; overflow-y: auto; }
+  .logo { font-size: 40px; }
+  .screen-title { font-size: 26px; }
+  .stat-value { font-size: 18px; }
+}

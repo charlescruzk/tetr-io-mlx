@@ -85,6 +85,13 @@
       on('btn-menu', () => this.goHome());
       on('toggle-music', () => this._flip('music'));
       on('toggle-sfx', () => this._flip('sfx'));
+      // Phase 14: the touch HUD's pause button — pause when playing, resume
+      // when paused (it sits behind the pause overlay otherwise).
+      on('btn-pause-touch', () => {
+        const g = this.game;
+        if (g && g.state === 'playing') g.pause();
+        else if (g && g.state === 'paused') this._resume();
+        });
 
       for (const btn of this.els['difficulty-seg'].children) {
         on(btn, () => this._selectDifficulty(btn.dataset.difficulty));
@@ -145,6 +152,7 @@
       this._showPage('game');
       this._hideOverlays();
       T.Input.bind(this.game);
+      if (T.Touch && T.Touch.bind) T.Touch.bind(this.game);
       this._updateHUD(this.game);
       this._syncInput(); // enables input for the game
       this._sfx('start');
@@ -162,6 +170,7 @@
     endGame() {
       if (!this.game) return;
       T.Input.setEnabled(false);
+      if (T.Touch && T.Touch.setEnabled) T.Touch.setEnabled(false);
       this._fillGameOver();
       this._showOverlay('gameover');
       this._sfx(this.game.result === 'won' ? 'win' : 'gameover');
@@ -234,6 +243,8 @@
       const inGame = this._page === 'game';
       const settingsUp = !this.els['screen-settings'].classList.contains('hidden');
       T.Input.setEnabled(inGame && !settingsUp);
+      // Phase 14: the touch layer gates identically to the keyboard.
+      if (T.Touch && T.Touch.setEnabled) T.Touch.setEnabled(inGame && !settingsUp);
      },
 
      // ---- mode select ----

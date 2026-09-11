@@ -129,10 +129,54 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       paints the visible error state. These stub `document`/`window` in Node
       and exercise ui.js + main.js's real boot path — they are what caught
       the second bug.
-- [ ] Phase 14 — Mobile responsive layout + touch controls
+- [x] Phase 14 — Mobile responsive layout + touch controls (done this
+      session). New js/touch.js: a thin touch layer NEXT to input.js —
+      touchstart/touchend/touchcancel with preventDefault() on each button,
+      dispatching to the exact same g.move/g.rotate/g.softDrop/g.hardDrop/
+      g.hold surface the keyboard uses (no duplicated game logic). Left/
+      Right/Soft Drop get the same DAS/ARR hold-repeat (160ms/40ms, matching
+      input.js); CW/CCW rotate, Hard Drop, and Hold are single-shot. A Pause
+      button (#btn-pause-touch) lives in the mobile HUD row (touch-only via
+      CSS). index.html gained the touch-controls markup (movement row +
+      action row, CW primary) and the touch.js script tag (after input.js).
+      style.css gained a (hover: none) and (pointer: coarse) media query —
+      not a width check, per SPEC — that: shows the touch-only controls
+      (display:none by default elsewhere), reflows the game screen
+      vertically (HUD row → board → hold+next → touch controls) via grid +
+      display:contents on the side panels, scales the board via CSS
+      (height min(52vh,560px), width auto — the 300×600 canvas keeps its
+      aspect, no horizontal scroll possible) with overflow-y:auto as a
+      short-screen safety valve, gives stat tiles flex shares (no HUD
+      overflow), and makes every menu button ≥44px full-width. Keyboard
+      path untouched: input.js was not modified this phase.
+      Test coverage: 4 new smoke tests (54 passed / 0 failed) drive
+      touch.js's real listeners in Node — buttons bind, a CW press rotates
+      via the live game, soft-drop repeats on the DAS/ARR schedule and
+      stops on release, and disabled presses no-op.
 - [ ] Phase 15 — Particle effects / juice
 
 ## Needs human visual check
+
+**Phase 14 (mobile + touch) needs a real device/dev-tools check.** The
+dispatch and repeat logic is smoke-tested in Node, but the layout and touch
+feel cannot be. In a browser, open dev tools' device toolbar (a phone
+viewport, e.g. 390×844 with "touch" emulation, or a real phone via
+file:// — note double-click won't exist there; any tap works) and verify:
+
+- Home / Mode Select / Settings / Pause / Game Over reflow: full-width
+  buttons, nothing overflows horizontally, targets feel ≥44px.
+- On the game screen: HUD row (stat tiles + Pause button) above the board,
+  hold+next row below it, two rows of touch buttons at the bottom. No
+  horizontal scroll at 320px or 390px width; board keeps its 1:2 shape.
+- Each touch control works: ← → move (tap-tap-tap and held for auto-repeat),
+  ↓ repeats while held, ↻ rotates CW, ↺ CCW, Drop hard-drops, Hold swaps
+  once per piece, Pause opens the overlay (and Resume still works from it).
+- On the SAME page, desktop widths still show keyboard-only play: the touch
+  buttons are hidden, arrow keys/Space/C behave exactly as before, and a
+  narrow desktop WINDOW (no touch) still gets the keyboard layout — the
+  breakpoint is (hover: none) and (pointer: coarse), not width.
+- A touch laptop (pointer: fine but touch present) should NOT get the
+  phone layout.
 
 **Phase 13 (the dead-button fix) still needs a real click-test.** The root
 causes are fixed and now covered by Node DOM-stub smoke tests, but a stub is
