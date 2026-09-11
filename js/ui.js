@@ -98,6 +98,18 @@
      // click handler that also blurs the control so a following Space/Enter
      // keypress doesn't re-trigger the button (Space is hard-drop in-game).
     _on(el, fn) {
+      // Accepts either a string element id or an already-resolved element —
+      // _bind() uses both call shapes. A string is resolved via
+      // getElementById here (Phase 13: the old version called .addEventListener
+      // on the raw string, which threw on the first binding and killed all
+      // button wiring).
+      if (typeof el === 'string') el = document.getElementById(el);
+      if (!el) {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('Tetris UI: no element to bind click handler to');
+          }
+        return;
+        }
       el.addEventListener('click', (e) => {
         fn();
         if (e.currentTarget && e.currentTarget.blur) e.currentTarget.blur();

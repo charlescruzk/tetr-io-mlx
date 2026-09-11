@@ -104,11 +104,48 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       (done or truthfully flagged "needs human visual check"). README.md's
       how-to-run was checked and is unchanged (still "open index.html"), so it
       was not edited.
-- [ ] Phase 13 — Fix: dead menu buttons on fresh open (priority — do first)
+- [x] Phase 13 — Fix: dead menu buttons on fresh open (done this session).
+      TWO root causes found and fixed, not just the predicted one:
+      (1) As predicted, `_on(el, fn)` in ui.js called `.addEventListener`
+      directly on raw string ids passed by `_bind()` ('btn-play', …) —
+      a string has no addEventListener, so the first binding threw
+      `TypeError`, aborting `_bind()`, and since main.js's `boot()` had no
+      try/catch the whole boot died and the rAF loop never started. Fixed:
+      `_on` now resolves string ids via `document.getElementById` (accepting
+      both call shapes) and warns + no-ops on a missing element.
+      (2) Found only by the NEW smoke tests (see below): main.js's frame
+      loop called `T.UI.updateHUD(g)` but ui.js defines `_updateHUD` — in a
+      real browser the very first rAF frame would have thrown and killed
+      the render loop right after the buttons were fixed. Fixed the name in
+      main.js. All other cross-module T.*.* calls were grepped and verified
+      to exist on their targets.
+      Hardening: main.js `boot()` is now wrapped in try/catch — on failure it
+      console.errors AND paints a visible on-page error state (headline +
+      stack) instead of leaving a silently dead page.
+      Regression guard: tests/run.js gained 5 DOM-stub smoke tests
+      (50 passed / 0 failed now): string-bound buttons get click listeners,
+      clicking Play navigates, clicking a mode card starts a live game, one
+      rAF frame runs cleanly with a live game, and a synthetic init failure
+      paints the visible error state. These stub `document`/`window` in Node
+      and exercise ui.js + main.js's real boot path — they are what caught
+      the second bug.
 - [ ] Phase 14 — Mobile responsive layout + touch controls
 - [ ] Phase 15 — Particle effects / juice
 
 ## Needs human visual check
+
+**Phase 13 (the dead-button fix) still needs a real click-test.** The root
+causes are fixed and now covered by Node DOM-stub smoke tests, but a stub is
+not a browser: no real event semantics, no real canvas, no CSS. A human
+should open `index.html` by double-click (file://) and confirm:
+
+- Home renders and **Play** navigates to Mode Select; **Settings** opens.
+- Every button in the Phase 9 checklist below actually works end-to-end
+  (mode cards start a game, Pause buttons, Settings Back returns to the
+  right place, Retry/Main Menu from Game Over).
+- The board animates (piece falls, HUD numbers update) — this specifically
+  re-verifies the second bug (main.js calling `updateHUD` instead of
+  `_updateHUD`), which only manifests in the running frame loop.
 
 Phase 5 (render.js) — no test-runner coverage possible (canvas/DOM). `node -c`
 is clean and the code was read back, but a human must open `index.html` and

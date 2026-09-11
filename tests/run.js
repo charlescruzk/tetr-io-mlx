@@ -543,5 +543,190 @@ test('getConfig throws on an unknown mode or difficulty', () => {
   assertThrows(() => Modes.getConfig('classic', 'medium'), 'unknown difficulty');
 });
 
+// ---------------------------------------------------------------- Phase 13
+// UI wiring smoke test (js/ui.js + js/main.js) with minimal DOM stubs.
+//
+// These modules are browser-only (no dual export), but their *wiring* is
+// testable in Node with stubs: this section is the regression guard for the
+// Phase 13 bug where _on('btn-play', ...) called .addEventListener on a raw
+// string, threw on the first binding, and left every menu button dead.
+// It is NOT a substitute for a human click-test in a real browser (canvas,
+// CSS, and real event semantics still need eyes) — see PROGRESS.md.
+
+function makeClassList(initial) {
+  const set = new Set(initial || []);
+  return {
+    add: (c) => set.add(c),
+    remove: (c) => set.delete(c),
+    contains: (c) => set.has(c),
+    toggle: (c, force) => {
+      const want = force === undefined ? !set.has(c) : !!force;
+      if (want) set.add(c); else set.delete(c);
+      return want;
+      },
+    };
+  }
+
+function makeEl(id) {
+  const el = {
+    id: id,
+    dataset: {},
+    listeners: {},
+    children: [],
+    className: '',
+    textContent: '',
+    innerHTML: '',
+    classList: makeClassList(id === 'screen-home' ? [] : ['hidden']),
+    blur: () => {},
+    appendChild: (child) => { el.children.push(child); return child; },
+    addEventListener: (type, fn) => {
+      (el.listeners[type] = el.listeners[type] || []).push(fn);
+      },
+    setAttribute: () => {},
+    };
+  return el;
+  }
+
+// Ids _bind() binds by string (btn-* and toggle-*) plus every screen/el
+// _cache() looks up. Screens start hidden except home, matching index.html.
+const UI_IDS = [
+  'screen-home', 'screen-mode-select', 'screen-game',
+  'screen-pause', 'screen-settings', 'screen-gameover',
+  'difficulty-seg', 'gameover-title', 'gameover-stats',
+  'toggle-music', 'toggle-sfx',
+  'val-score', 'val-lines', 'val-level', 'val-time',
+  'stat-score', 'stat-lines', 'stat-level', 'stat-time',
+  'btn-play', 'btn-settings-home', 'btn-back-home', 'btn-resume',
+  'btn-restart-pause', 'btn-settings-pause', 'btn-quit-pause',
+  'btn-settings-back', 'btn-retry', 'btn-menu',
+  ];
+
+function installDomStubs() {
+  const byId = {};
+  for (const id of UI_IDS) byId[id] = makeEl(id);
+
+  // difficulty segmented control: three buttons like index.html's markup.
+  byId['difficulty-seg'].children = ['easy', 'normal', 'hard'].map((d) => {
+    const b = makeEl('diff-' + d);
+    b.dataset.difficulty = d;
+    return b;
+    });
+
+  const modeCards = ['classic', 'marathon', 'sprint'].map((m) => {
+    const c = makeEl('mode-' + m);
+    c.dataset.mode = m;
+    return c;
+    });
+
+  const doc = {
+    readyState: 'complete',
+    body: makeEl('body'),
+    activeElement: makeEl('active'),
+    getElementById: (id) => byId[id] || null,
+    querySelectorAll: (sel) => (sel === '.mode-card' ? modeCards : []),
+    createElement: (tag) => makeEl(tag + '-new'),
+    addEventListener: () => {},
+    };
+  const win = { addEventListener: () => {} };
+  let rafCb = null;
+  const raf = (fn) => { rafCb = fn; return 0; };
+
+  global.document = doc;
+  global.window = win;
+  global.requestAnimationFrame = raf;
+
+  return {
+    byId: byId,
+    body: doc.body,
+    modeCards: modeCards,
+    click: (el, extra) => {
+      for (const fn of (el.listeners.click || [])) fn(Object.assign({
+        currentTarget: el,
+        }, extra || {}));
+      },
+    // main.js's rAF callback, if boot() scheduled one.
+    runFrame: (ts) => { if (rafCb) rafCb(ts); },
+    };
+  }
+
+// Browser-only modules that the UI layer guards on but this smoke test
+// replaces with no-op stubs (their real behavior is Phase 6/10's concern).
+global.Tetris = global.Tetris || {};
+global.Tetris.Input = { setEnabled: () => {}, bind: () => {} };
+global.Tetris.Render = { frame: () => {} };
+// game.js exports via module.exports in Node and only attaches
+// Tetris.Game in the browser — bridge it so the UI layer can start games.
+global.Tetris.Game = Game;
+
+const dom = installDomStubs();
+// The ui.js/main.js UMD wrappers attach to `window` when one exists, so the
+// stub window must share the same Tetris namespace the logic modules
+// (required at the top of this file, before `window` existed) registered on
+// globalThis — otherwise the UI would see a namespace with no Input/Game.
+global.window.Tetris = global.Tetris;
+require(path.join(__dirname, '..', 'js', 'ui.js'));
+// ui.js attaches window.Tetris.UI rather than module.exports, so grab the
+// object off the namespace.
+const UI = global.Tetris.UI;
+// main.js runs boot() at require time (readyState stub is 'complete'),
+// which is the point: it must survive UI.init() + schedule the rAF loop.
+require(path.join(__dirname, '..', 'js', 'main.js'));
+
+test('boot() wires every string-bound button (Phase 13 regression guard)', () => {
+  for (const id of ['btn-play', 'btn-settings-home', 'btn-back-home', 'btn-resume',
+    'btn-restart-pause', 'btn-settings-pause', 'btn-quit-pause',
+    'btn-settings-back', 'btn-retry', 'btn-menu',
+    'toggle-music', 'toggle-sfx']) {
+    assert((dom.byId[id].listeners.click || []).length >= 1,
+      `${id} should have a click listener bound`);
+    }
+  for (const b of dom.byId['difficulty-seg'].children) {
+    assert((b.listeners.click || []).length >= 1, 'difficulty buttons should be bound');
+    }
+  for (const c of dom.modeCards) {
+    assert((c.listeners.click || []).length >= 1, 'mode cards should be bound');
+    }
+  });
+
+test('clicking Play navigates to mode select', () => {
+  dom.click(dom.byId['btn-play']);
+  assertEqual(UI._page, 'mode-select', 'Play should land on the mode-select screen');
+  });
+
+test('clicking a mode card starts a live game', () => {
+  dom.click(dom.byId['btn-play']); // back to mode select
+  dom.click(dom.modeCards[0]); // classic
+  assertEqual(UI._page, 'game', 'a mode card should start the game screen');
+  assert(UI.game && UI.game.state === 'playing', 'a game object should be live');
+  assertEqual(UI.game.config.mode, 'classic', 'the clicked mode should be used');
+  });
+
+test('one rAF frame runs cleanly with a live game', () => {
+  const g = UI.game;
+  assert(g !== null, 'a game should be live from the previous test');
+  // no uncaught throw in the frame loop for the first ~2 seconds of play
+  dom.runFrame(0);
+  dom.runFrame(500);
+  dom.runFrame(1600);
+  });
+
+test('a failed boot() renders a visible on-page error (hardening check)', () => {
+  const realInit = UI.init;
+  const realErr = console.error;
+  console.error = () => {};
+  UI.init = () => { throw new Error('synthetic init failure'); };
+  try {
+    delete require.cache[path.join(__dirname, '..', 'js', 'main.js')];
+    require(path.join(__dirname, '..', 'js', 'main.js'));
+    } finally {
+    UI.init = realInit;
+    console.error = realErr;
+    }
+  assert(dom.body.innerHTML.indexOf('Something went wrong') !== -1,
+    'a failed init must paint a visible error state, not a dead page');
+  assert(dom.body.innerHTML.indexOf('synthetic init failure') !== -1,
+    'the error state should include the failure message');
+  });
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);
