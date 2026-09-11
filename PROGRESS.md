@@ -196,6 +196,33 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       + 2 pool smoke tests (bounded at MAX 240 with oldest-cull, expiry
       within max life + draw() reclaim) — 59 passed / 0 failed total.
       render.js/particles.js drawing itself has no test coverage (canvas).
+- [x] Phase 17 — Mobile playability redesign (portrait AND landscape), from
+      the owner's real iPhone test of Phase 16 (2026-09-11). Both
+      orientations were reported unplayable; the screenshots showed the
+      pre-16b symptom (touch bar beside the board, layout pushed off the
+      left edge), which points at Safari serving a stale cached copy — but
+      even the fixed layout deserved a redesign, so both were done:
+      PORTRAIT: the game screen is now a 3-column grid — hold | board |
+      next — instead of giving hold/next their own full-width rows. Rows:
+      HUD strip (pause + score/lines/level/time, labels shrunk so SCORE
+      never truncates) / the game row fills every leftover pixel (board
+      scales to fit BOTH its max-width and max-height, ratio preserved, so
+      tall phones constrain by width and short ones by height) / two rows
+      of ≥60px touch buttons pinned to the bottom where thumbs live.
+      LANDSCAPE (new): HUD strip on top, game row fills the rest, and the
+      touch controls leave the flow entirely — movement cluster fixed to
+      the bottom-LEFT corner, action cluster (Hold/CCW/CW/Drop) fixed to
+      the bottom-RIGHT corner, under the thumbs. No scrolling anywhere.
+      SUPPORT: viewport-fit=cover + env(safe-area-inset-*) padding so the
+      notch/home indicator don't cover anything; 100dvh (vh fallback) so
+      the collapsing iOS URL bar doesn't clip controls; overscroll-behavior
+      none + touch-action manipulation body-wide so rubber-band scroll and
+      double-tap zoom never eat game input.
+      No JS changed; touch.js dispatches to the same buttons regardless of
+      layout. `node tests/run.js` 60/60. CSS/layout is NOT machine-verified:
+      needs the owner's phone re-check (see the Phase 17 flag below) —
+      including a cache-busting reload, since the first iPhone test may
+      have been seeing stale cached HTML.
 - [x] Grade A closeout — every line of CLAUDE.md's Grade A bar re-checked
       against the actual repo state this session:
       tests/run.js exits 0 (60 passed / 0 failed) and covers Board, Piece,
@@ -249,6 +276,22 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       rendering/CSS only and carry the Phase 16 re-check flag below.
 
 ## Needs human visual check
+
+**Phase 17 (mobile redesign) needs a real phone check — portrait AND
+landscape.** Open the game on a phone (hard-refresh first: pull down to
+reload, or use a private tab — the first iPhone test likely saw stale
+cached HTML). Verify:
+
+- **Portrait**: HUD strip (Pause + Score/Lines/Level/Time, nothing
+  truncated) → board centered between Hold (left) and Next (right) → two
+  rows of touch buttons at the bottom. Nothing cut off, no scroll, board
+  as tall as the screen allows.
+- **Landscape (rotate the phone)**: HUD strip on top, board centered,
+  Hold top-left / Next top-right, and the touch controls split into a
+  bottom-left cluster (← ↓ →) and a bottom-right cluster (Hold ↺ ↻ Drop).
+  Nothing cut off, no scroll.
+- Play a few pieces both ways: buttons reachable, hold-repeat works on
+  ←/→/↓, Pause opens the overlay, notch/home-indicator area stays clear.
 
 **Phase 16 (the three browser-bug fixes) needs a real browser re-check.**
 All three fixes are logic-verified where Node can reach (60/60), but 16a is

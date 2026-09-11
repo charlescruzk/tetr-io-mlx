@@ -460,6 +460,14 @@ body {
 }
 
 @media (hover: none) and (pointer: coarse) {
+  /* Phone-wide flow guards: no rubber-band scrolling between screens, no
+     double-tap-zoom stealing input latency from game buttons. */
+  body {
+    overscroll-behavior: none;
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    }
+
   /* Show the touch-only controls. */
   .touch-controls {
     display: flex;
@@ -478,7 +486,7 @@ body {
   .tbtn {
     flex: 1 1 0;
     min-width: 44px;
-    min-height: 56px;
+    min-height: 60px;
     appearance: none;
     border: 1px solid rgba(124, 92, 255, 0.45);
     background: var(--surface-raised);
@@ -505,23 +513,31 @@ body {
     letter-spacing: 1px;
     }
 
-  /* --- in-game: stack vertically, HUD above the board --- */
+  /* --- in-game, PORTRAIT (Phase 17 redesign) ---
+     Three columns: hold | board | next, so the side panels flank the board
+     instead of burning their own full-width rows. Rows: HUD strip on top,
+     the game row fills every leftover pixel, touch controls pinned to the
+     bottom where thumbs live. Height is the dynamic viewport (dvh with a
+     vh fallback) so the collapsing iOS URL bar doesn't clip the controls,
+     and env() safe-area padding keeps everything clear of the notch/home
+     indicator. */
   .game-layout {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto auto auto 1fr;
+    grid-template-columns: minmax(48px, 76px) minmax(0, 1fr) minmax(48px, 76px);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
-      "hud hud"
-      "board board"
-      "hold next"
-      "touch touch";
-    align-content: start;
-    gap: 12px;
-    padding: 12px;
+      "hud hud hud"
+      "hold board next"
+      "touch touch touch";
+    gap: 10px;
+    height: 100vh;
+    height: 100dvh;
+    padding: calc(8px + env(safe-area-inset-top)) 10px
+             calc(8px + env(safe-area-inset-bottom));
     }
-  #screen-game { overflow-y: auto; } /* safety valve on very short screens */
-   /* Promote the panels' children (label/canvas/hud) to grid items so the
-      HUD can sit above the board without restructuring the shared DOM. */
+  #screen-game { overflow: hidden; } /* the grid fits the viewport; no scroll */
+   /* Promote the panels' children (canvas/hud) to grid items so they can
+      occupy their grid areas without restructuring the shared DOM. */
   .side-hold,
   .side-next { display: contents; }
   .side-hold .panel-label,
@@ -534,52 +550,87 @@ body {
     align-items: stretch;
     margin-top: 0;
     }
-   /* Stat tiles share the row (up to 4 + pause) instead of overflowing. */
+   /* Stat tiles share the row (pause + 4 stats); labels shrink so SCORE
+      never truncates to "SCO" on a 320px phone. */
   #hud .stat {
     flex: 1 1 0;
     min-width: 0;
-    padding: 8px 10px;
+    padding: 6px 8px;
     }
+  #hud .stat-label { font-size: 10px; letter-spacing: 0.5px; }
   #hud .stat-value { font-size: 16px; }
    /* HUD pause button: inline with the stat tiles. */
   .touch-pause {
     flex: 0 0 auto;
     align-self: center;
-    margin-left: 8px;
+    margin-left: 6px;
     padding: 10px 14px;
     border-radius: 10px;
     }
 
-  /* The grid item is the wrapper (Phase 16 fix 16b): grid-area was on the
-     canvas, which is not itself a grid child, so the board was placed by
-     auto-placement luck. The canvas keeps the scaling rules below. */
-  .board-wrap { grid-area: board; }
-
+  /* The grid item is the wrapper; the canvas centers inside it and scales
+     to whatever the 1fr row actually gives it (both maxes, ratio preserved,
+     so a tall narrow phone constrains by width and a squat one by height). */
+  .board-wrap {
+    grid-area: board;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 0;
+    }
   #board-canvas {
     display: block;
-    margin: 0 auto;
-    /* Scale to fit: the canvas is 300x600 (1:2). Cap by both width and
-       height so a phone gets the biggest board the screen allows without
-       ever causing horizontal scroll. */
-    height: min(52vh, 560px);
-    max-width: calc(100vw - 24px);
+    max-width: 100%;
+    max-height: 100%;
     width: auto;
+    height: auto;
     }
 
-  #hold-canvas {
-    grid-area: hold;
-    justify-self: end;
-    height: 88px;
-    width: auto;
-    }
+   /* Side panels: fill their narrow columns, top-aligned next to the board
+      (hold is 1:1, next is 1:3 — the queue reads fine this small). */
+  #hold-canvas,
   #next-canvas {
-    grid-area: next;
-    justify-self: start;
-    height: 88px;
-    width: auto;
+    width: 100%;
+    height: auto;
+    align-self: start;
     }
 
   #touch-controls { grid-area: touch; }
+
+  /* --- in-game, LANDSCAPE (Phase 17) ---
+     The board is height-starved in landscape, so: HUD strip stays on top,
+     the game row fills the rest, and the touch controls leave the flow
+     entirely — movement cluster pinned to the bottom-LEFT corner, action
+     cluster to the bottom-RIGHT corner, exactly under the thumbs that
+     hold the phone. */
+  @media (orientation: landscape) {
+    .game-layout {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-rows: auto minmax(0, 1fr);
+      grid-template-areas:
+        "hud hud hud"
+        "hold board next";
+      }
+    #touch-controls { display: contents; }
+    .touch-row {
+      position: fixed;
+      bottom: calc(10px + env(safe-area-inset-bottom));
+      gap: 12px;
+      }
+    .touch-row:nth-of-type(1) { left: calc(12px + env(safe-area-inset-left)); }
+    .touch-row:nth-of-type(2) { right: calc(12px + env(safe-area-inset-right)); }
+    .tbtn {
+      flex: 0 0 auto;
+      min-width: 64px;
+      min-height: 56px;
+      padding: 0 16px;
+      }
+    #hold-canvas { width: auto; height: 72px; align-self: start; }
+    #next-canvas { width: auto; height: 132px; align-self: start; }
+    #hud .stat { padding: 4px 8px; }
+    #hud .stat-value { font-size: 14px; }
+    }
 
   /* --- menus: full-width, roomy touch targets --- */
   .screen-inner { padding: 24px 16px; gap: 20px; }
