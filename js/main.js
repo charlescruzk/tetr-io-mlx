@@ -15,6 +15,12 @@
   const MAX_DT = 100;
 
   let last = 0;
+   // The game's state as of the END of the previous frame. Comparing against
+   // it (not against this frame's starting state) is what makes between-
+   // frames transitions visible: a keypress that pauses the game lands
+   // between two frames, so reading g.state fresh each frame always saw
+   // 'paused' on both sides and the pause overlay never opened (Phase 16c).
+  let lastState = null;
 
   function frame(ts) {
     if (!last) last = ts;
@@ -25,17 +31,22 @@
     const g = T.UI.game;
 
     if (g) {
-      const before = g.state;
+      const prev = lastState;
+      lastState = g.state;
 
        // Advance the simulation only while actively playing. Paused/over/won
        // states are frozen: no gravity, no lock timer, no clock.
-      if (before === 'playing') {
+      if (g.state === 'playing') {
         g.tick(dt);
         T.UI._updateHUD(g);
-           // React to a transition that happened this tick (or via input).
+        }
+
+       // React to any playing→X transition since the previous frame ended —
+       // whether it happened inside g.tick or via input between frames.
+      if (prev === 'playing') {
         if (g.state === 'paused') T.UI.openPause();
         else if (g.state === 'over' || g.state === 'won') T.UI.endGame();
-        } else if (before === 'paused' && g.state === 'playing') {
+        } else if (prev === 'paused' && g.state === 'playing') {
         // Resumed by the Resume button or Esc/P: keep the overlay closed
         // (main.js only OPENS overlays; the UI buttons close them).
         T.UI._hideOverlay('pause');

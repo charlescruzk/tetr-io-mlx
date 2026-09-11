@@ -550,8 +550,12 @@ body {
     border-radius: 10px;
     }
 
+  /* The grid item is the wrapper (Phase 16 fix 16b): grid-area was on the
+     canvas, which is not itself a grid child, so the board was placed by
+     auto-placement luck. The canvas keeps the scaling rules below. */
+  .board-wrap { grid-area: board; }
+
   #board-canvas {
-    grid-area: board;
     display: block;
     margin: 0 auto;
     /* Scale to fit: the canvas is 300x600 (1:2). Cap by both width and

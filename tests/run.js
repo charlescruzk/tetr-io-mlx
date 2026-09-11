@@ -692,8 +692,13 @@ function installDomStubs() {
     addEventListener: () => {},
     };
   const win = { addEventListener: () => {} };
-  let rafCb = null;
-  const raf = (fn) => { rafCb = fn; return 0; };
+  // rAF is a LIST, like a real browser: one frame fires every callback that
+  // was registered when the frame started. A single-slot stub breaks once
+  // two loops coexist (main.js's frame + touch.js's self-scheduling loop
+  // both register, and whichever registered last won the slot — Phase 16's
+  // 16c test tripped exactly on that).
+  let rafFns = [];
+  const raf = (fn) => { rafFns.push(fn); return 0; };
 
   global.document = doc;
   global.window = win;
@@ -708,8 +713,14 @@ function installDomStubs() {
         currentTarget: el,
         }, extra || {}));
       },
-    // main.js's rAF callback, if boot() scheduled one.
-    runFrame: (ts) => { if (rafCb) rafCb(ts); },
+    // One browser frame: invoke every rAF callback registered at frame
+    // start; callbacks scheduled DURING the pass (each loop re-registers
+    // itself) wait for the next frame, exactly like real rAF semantics.
+    runFrame: (ts) => {
+      const fns = rafFns;
+      rafFns = [];
+      for (const fn of fns) fn(ts);
+      },
     // Fire a synthetic touchstart/touchend on a button (touch.js registers
     // its listeners there; real touch semantics stay a human check).
     touchStart: (el) => {
@@ -882,6 +893,40 @@ test('particles: they expire after their life and draw() reclaims the slots', ()
   const stubCtx = { fillRect: () => {}, globalAlpha: 1 };
   Particles.draw(stubCtx, 1000 + 1500); // must not throw; reclaims slots
   assertEqual(Particles.count(1000 + 1500), 0, 'nothing resurrects after expiry');
+  });
+
+// ---------------------------------------------------------------- Phase 16
+// 16c: a keyboard pause that lands BETWEEN frames (Esc/P sets state to
+// 'paused' between two rAF callbacks) must still open the Pause overlay.
+// The old code read g.state fresh at the top of every frame, so both sides
+// of the transition looked like 'paused' and the openPause branch never
+// fired — the user saw a frozen board with no menu.
+
+test('16c: a between-frames keyboard pause opens the Pause overlay', () => {
+  // A fresh game so the Phase 14 touch tests' held buttons can't interfere.
+  dom.click(dom.byId['btn-play']);
+  dom.click(dom.modeCards[0]);
+  const g = UI.game;
+  const pauseEl = dom.byId['screen-pause'];
+
+  dom.runFrame(3000); // one full frame with the game playing
+  assert(pauseEl.classList.contains('hidden'),
+    'the overlay starts hidden while playing');
+
+  g.pause(); // Esc/P lands between frames — no frame runs in between
+  assertEqual(g.state, 'paused', 'the game is paused between frames');
+  assert(pauseEl.classList.contains('hidden'),
+    'no frame has run yet, so the overlay is still hidden');
+  dom.runFrame(3100); // the NEXT frame must notice playing→paused and open it
+  assert(!pauseEl.classList.contains('hidden'),
+    'the frame after a between-frames pause must open the Pause overlay');
+
+  // And the reverse transition still closes it (Esc/P again → resume).
+  g.resume();
+  dom.runFrame(3200);
+  assert(pauseEl.classList.contains('hidden'),
+    'the frame after a between-frames resume must close the overlay');
+  assertEqual(g.state, 'playing', 'the game is playing again after resume');
   });
 
 test('a failed boot() renders a visible on-page error (hardening check)', () => {

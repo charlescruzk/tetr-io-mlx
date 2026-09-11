@@ -245,8 +245,10 @@
         ctx.lineWidth = 1;
         ctx.strokeRect(0.5, i * slot * CELL + 0.5, 4 * CELL - 1, slot * CELL - 1);
         if (!type) continue;
-        // further-out pieces dim slightly for a sense of depth
-        this._drawPieceCentered(ctx, type, 0, i, 4, slot, COLORS[type], i === 0 ? 1 : 0.7 - i * 0.15);
+        // further-out pieces dim slightly for a sense of depth.
+        // rowSlot is a CELL row, so slot i starts at i * slot cells down —
+        // passing bare i drew all three pieces in the first 4x4 box (16a).
+        this._drawPieceCentered(ctx, type, 0, i * slot, 4, slot, COLORS[type], i === 0 ? 1 : 0.7 - i * 0.15);
       }
     },
   };

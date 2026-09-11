@@ -5,18 +5,17 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: browser click-through DONE (2026-09-11) — Phase 16 fixes are next
+## Status: Phase 16 fixes DONE (2026-09-11) — 3 browser bugs fixed, re-check pending
 
-The page was finally opened in a real browser (Chromium via Playwright).
-Phase 13's fix is CONFIRMED: Play works, a game starts, gravity/DAS/hard
-drop/line clear/particles/pause-clock/settings-persistence all behaved
-end-to-end. Three real bugs were found and root-caused — see PLAN.md
-Phase 16 (16a next-queue overlap in render.js, 16b phone layout off-screen
-because #touch-controls is outside the grid it's assigned to, 16c keyboard
-pause never opens the overlay because main.js detects the transition
-within a single frame). Do Phase 16 next. The "Needs human visual check"
-flags for Phases 5/6/9/10/11/13 below are now largely discharged by that
-click-through; 14 and 15 still need a re-check after 16b/16a land.
+The page was opened in a real browser (Chromium via Playwright) and Phase
+13's fix is CONFIRMED: Play works, a game starts, gravity/DAS/hard drop/
+line clear/particles/pause-clock/settings-persistence all behaved
+end-to-end. Three real bugs were found and root-caused (PLAN.md Phase 16)
+and are NOW FIXED and committed (see the Phase 16 checklist entry). What
+remains for a human: re-check exactly three things in a browser — (1) the
+Next queue shows 3 separate pieces, (2) the phone layout at 390×844 puts
+the touch bar BELOW the board with nothing cut off, (3) Esc/P opens the
+Pause overlay. See "Needs human visual check" → Phase 16 below.
 
 Phase 13 (the dead-menu-buttons regression) is FIXED and committed. There
 were TWO root causes, not the one PLAN.md predicted: (1) the predicted
@@ -31,8 +30,9 @@ wiring paths are now covered by Node DOM-stub smoke tests in tests/run.js,
 so this bug class has a regression guard.
 
 Phase 14 (mobile responsive layout + touch controls) and Phase 15 (particle
-effects) are both implemented, tested where Node can reach (59/59 green),
-and committed.
+effects) are both implemented, tested where Node can reach (60/60 green
+after Phase 16), and committed. 14 and 15 still need a re-check in a
+browser now that the Phase 16 layout/render fixes have landed.
 
 What is NOT done without a human: actually opening index.html in a browser.
 That gap is what let the Phase 13 regression ship in the first place. See
@@ -198,7 +198,7 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       render.js/particles.js drawing itself has no test coverage (canvas).
 - [x] Grade A closeout — every line of CLAUDE.md's Grade A bar re-checked
       against the actual repo state this session:
-      tests/run.js exits 0 (59 passed / 0 failed) and covers Board, Piece,
+      tests/run.js exits 0 (60 passed / 0 failed) and covers Board, Piece,
       Randomizer, Scoring, Modes, Game, the Phase 13/14 UI+touch wiring, and
       the Phase 15 model signals + particle pool (all requires at the top of
       tests/run.js are uncommented with real test sections under them). No
@@ -214,13 +214,61 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       fully verify — those all carry specific "needs human visual check"
       notes below and should be clicked through by a human before calling
       this build done-done.
-- [ ] Phase 16 — Fixes from the first real browser click-through: 16a
-      next-queue slot overlap (render.js), 16b phone layout off-screen
-      (#touch-controls outside the grid it's assigned to), 16c keyboard
-      pause never opens the overlay (main.js same-frame transition check).
-      All three root-caused in PLAN.md Phase 16.
+- [x] Phase 16 — Fixes from the first real browser click-through (done this
+      session). Each root cause was re-verified against the current file
+      before fixing (all three confirmed as PLAN.md described):
+      16a render.js `_drawNext` passed the slot index `i` where
+      `_drawPieceCentered` expects a CELL row (`oy = rowSlot * CELL`), so
+      all three next pieces drew inside the first 4×4 slot. Fixed: pass
+      `i * slot` (the border drawing already used `i * slot * CELL`).
+      16b index.html had `#touch-controls` as a SIBLING of `.game-layout`,
+      so the coarse-pointer CSS's `grid-area: touch` targeted nothing and
+      `#screen-game`'s flex row placed the touch bar beside the board,
+      pushing the layout off-screen at 390px. Fixed: moved `#touch-controls`
+      inside `.game-layout` as its last child (harmless on desktop, where
+      it's `display:none` and the layout is flex). Also moved
+      `grid-area: board` from `#board-canvas` (not a grid item) to its
+      wrapper `.board-wrap` — the board was only landing correctly by
+      auto-placement luck.
+      16c main.js's frame() read `g.state` fresh each frame, so a
+      keyboard pause landing BETWEEN frames was invisible to the
+      `before === 'playing'` branch — the game froze but the Pause overlay
+      never opened. Fixed: a module-level `lastState` (previous frame's
+      end-state) and the transition checks now compare against it, so any
+      playing→paused/over/won or paused→playing transition opens/closes
+      overlays regardless of what triggered it.
+      Harness fix found by the 16c test: the DOM stub's rAF was a SINGLE
+      slot, but touch.js's `_loop` also self-schedules via rAF — after the
+      Phase 14 tests, whichever loop registered last owned the slot and
+      `runFrame()` silently invoked the wrong loop (a real browser fires
+      ALL registered rAF callbacks each frame). The stub now keeps a list
+      and fires every callback registered at frame start.
+      Test coverage: new smoke test "16c: a between-frames keyboard pause
+      opens the Pause overlay" (pause + resume both land between frames and
+      the overlay must follow) — 60 passed / 0 failed. 16a/16b are
+      rendering/CSS only and carry the Phase 16 re-check flag below.
 
 ## Needs human visual check
+
+**Phase 16 (the three browser-bug fixes) needs a real browser re-check.**
+All three fixes are logic-verified where Node can reach (60/60), but 16a is
+canvas drawing and 16b is CSS layout — verify by opening index.html
+(double-click, file://) and checking exactly these three things:
+
+- **16a — Next queue**: start any game and look at the Next panel. It must
+  show **3 separate pieces, one per stacked box**, the next piece brightest
+  and further ones dimmer. (Before the fix all three overlapped in the top
+  box.)
+- **16b — Phone layout**: dev-tools device toolbar at 390×844 with touch
+  emulation. The game screen must read, top to bottom: HUD row → board →
+  hold+next row → two rows of touch buttons **below the board**, with
+  nothing cut off and no horizontal scroll. (Before the fix the touch bar
+  sat beside the board and pushed everything off the left edge.)
+- **16c — Keyboard pause**: with a game running, press Esc or P. The game
+  must freeze AND the Pause overlay must appear. (Before the fix the board
+  froze with no menu; Resume/Esc must still close it.)
+
+**Phase 15 (particles) needs a real browser check.** The pool math is
 
 **Phase 15 (particles) needs a real browser check.** The pool math is
 smoke-tested in Node, but the look/feel is not. Open index.html
