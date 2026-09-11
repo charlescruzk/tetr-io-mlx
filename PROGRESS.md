@@ -5,23 +5,29 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: regression found — Phase 13 (bug fix) is next, then new scope (14, 15)
+## Status: Phases 13–15 done (2026-09-11) — awaiting a human click-through
 
-Phases 0–12 were previously marked complete, but a real user opened
-`index.html` by double-click exactly as instructed and Play did nothing —
-none of the menu buttons work. This is exactly the gap "needs human visual
-check" was flagging: those phases were code-reviewed and statically checked,
-never actually opened in a browser by an agent. See PLAN.md Phase 13 for the
-likely root cause (a string-id/element mismatch in `js/ui.js`'s `_on`/`_bind`)
-and required fix + hardening. **Do Phase 13 before anything else** — new
-feature work on top of a build where the menu doesn't open is pointless.
+Phase 13 (the dead-menu-buttons regression) is FIXED and committed. There
+were TWO root causes, not the one PLAN.md predicted: (1) the predicted
+string-id/element mismatch in ui.js's `_on` (fixed: strings resolve via
+getElementById; missing elements warn instead of throwing), and (2) a
+second latent bug found by the NEW smoke tests — main.js's frame loop
+called `T.UI.updateHUD` but ui.js defines `_updateHUD`, which would have
+killed the render loop on the first frame in a real browser even after fix
+(1). main.js's `boot()` is now try/catch-hardened: any init failure paints
+a visible on-page error state instead of a silently dead page. The boot +
+wiring paths are now covered by Node DOM-stub smoke tests in tests/run.js,
+so this bug class has a regression guard.
 
-Two new phases were added after Phase 13, expanding scope beyond the
-original 12-phase build (approved by the project owner): Phase 14 (mobile
-responsive layout + real touch controls — previously out of scope, SPEC.md
-updated) and Phase 15 (particle effects layered on top of Phase 11's
-existing juice). See SPEC.md's new "Mobile & touch" and "Juice / particle
-effects" sections for the requirements.
+Phase 14 (mobile responsive layout + touch controls) and Phase 15 (particle
+effects) are both implemented, tested where Node can reach (59/59 green),
+and committed.
+
+What is NOT done without a human: actually opening index.html in a browser.
+That gap is what let the Phase 13 regression ship in the first place. See
+"Needs human visual check" below — the Phase 13/14/15 flags there are the
+fastest pass (click Play, drive a game, resize to a phone viewport, watch
+particles), and the older Phase 5/6/9/10/11 flags remain open too.
 
 Phases 0–12 (the original build) history below is kept as-is for reference;
 it is no longer the full picture of what's needed to call this done.
@@ -179,8 +185,24 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       + 2 pool smoke tests (bounded at MAX 240 with oldest-cull, expiry
       within max life + draw() reclaim) — 59 passed / 0 failed total.
       render.js/particles.js drawing itself has no test coverage (canvas).
-- [ ] Grade A closeout — every line of CLAUDE.md's Grade A bar re-checked
-      against the actual repo state before declaring the build done.
+- [x] Grade A closeout — every line of CLAUDE.md's Grade A bar re-checked
+      against the actual repo state this session:
+      tests/run.js exits 0 (59 passed / 0 failed) and covers Board, Piece,
+      Randomizer, Scoring, Modes, Game, the Phase 13/14 UI+touch wiring, and
+      the Phase 15 model signals + particle pool (all requires at the top of
+      tests/run.js are uncommented with real test sections under them). No
+      `TODO(qwen…)` markers remain anywhere in js/ (grep clean). All six
+      screens exist in index.html; every menu path is exercised by the
+      smoke tests where Node can reach it. Modes/difficulties selectable and
+      provably distinct (Phase 8 tests). Settings persistence + audio
+      muting are implemented and gated on the Phase 9/10 human flags below.
+      Every phase 0-15 has an entry in this file (done, or honestly flagged
+      needs-human-visual-check). git log is one commit per phase. The
+      honest gap that remains: phases 5/6/9/10/11/13/14/15 involve canvas,
+      CSS, real touch/keyboard events, or Web Audio, which no stub test can
+      fully verify — those all carry specific "needs human visual check"
+      notes below and should be clicked through by a human before calling
+      this build done-done.
 
 ## Needs human visual check
 
