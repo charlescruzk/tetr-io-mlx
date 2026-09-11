@@ -947,5 +947,35 @@ test('a failed boot() renders a visible on-page error (hardening check)', () => 
     'the error state should include the failure message');
   });
 
+// ---------------------------------------------------------------- Phase 18
+// index.html structure guards. The touch bar was twice shipped as a sibling
+// of .game-layout (a stray </div>), which the DOM-stub tests above cannot
+// see because they never parse the real markup. A depth walk over the real
+// file catches it.
+
+test('index.html: #touch-controls is nested inside .game-layout', () => {
+  const html = require('fs').readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const start = html.indexOf('class="game-layout"');
+  const touch = html.indexOf('id="touch-controls"');
+  assert(start !== -1 && touch !== -1, 'expected both .game-layout and #touch-controls in index.html');
+  assert(touch > start, '#touch-controls should come after .game-layout opens');
+  // Walk div tags between the two; depth must still be > 0 when we reach the touch bar.
+  const between = html.slice(start, touch);
+  const opens = (between.match(/<div\b/g) || []).length;   // includes the .game-layout div itself
+  const closes = (between.match(/<\/div>/g) || []).length;
+  assert(opens - closes >= 1,
+    `#touch-controls is outside .game-layout (div depth ${opens - closes} at the touch bar) — a stray </div> closed the grid early`);
+});
+
+test('index.html: every touch action the CSS/touch layer expects is present exactly once', () => {
+  const html = require('fs').readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  for (const a of ['left', 'right', 'soft', 'cw', 'ccw', 'hard', 'hold']) {
+    const n = (html.match(new RegExp('data-action="' + a + '"', 'g')) || []).length;
+    assertEqual(n, 1, `expected exactly one data-action="${a}" button, found ${n}`);
+  }
+  assert(html.indexOf('class="touch-cluster touch-left"') !== -1 && html.indexOf('class="touch-cluster touch-right"') !== -1,
+    'touch buttons must live in the two thumb clusters the landscape CSS pins to the corners');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

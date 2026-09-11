@@ -87,23 +87,20 @@
           </div>
         </div>
       </div>
-      </div>
 
-      <!-- Phase 14: on-screen touch controls (touch-only via CSS; hidden on
-           pointer devices that have hover). This is INSIDE .game-layout so
-           the coarse-pointer CSS's grid-area: touch applies to it (Phase 16
-           fix 16b — as a sibling of the grid it was a no-op, and the flex
-           row pushed the layout off-screen). Buttons carry data-action,
-           which js/touch.js dispatches to the same game action surface
-           input.js uses. Row 1 is movement; row 2 is actions, Rotate CW
-           primary. -->
+      <!-- Touch controls (shown only on coarse-pointer devices via CSS).
+           Must stay a direct child of .game-layout: the touch CSS places it
+           by grid-area. Two thumb clusters so portrait and landscape share
+           one muscle memory: left thumb = movement, right thumb = actions.
+           Buttons carry data-action, dispatched by js/touch.js to the same
+           game action surface input.js uses. -->
       <div id="touch-controls" class="touch-controls">
-        <div class="touch-row">
+        <div class="touch-cluster touch-left">
           <button class="tbtn" data-action="left" aria-label="Move left">&#8592;</button>
-          <button class="tbtn tbtn-wide" data-action="soft" aria-label="Soft drop">&#8595;</button>
           <button class="tbtn" data-action="right" aria-label="Move right">&#8594;</button>
+          <button class="tbtn tbtn-wide" data-action="soft" aria-label="Soft drop">&#8595;</button>
         </div>
-        <div class="touch-row">
+        <div class="touch-cluster touch-right">
           <button class="tbtn tbtn-small" data-action="hold" aria-label="Hold">Hold</button>
           <button class="tbtn" data-action="ccw" aria-label="Rotate counter-clockwise">&#8634;</button>
           <button class="tbtn tbtn-primary" data-action="cw" aria-label="Rotate clockwise">&#8635;</button>

@@ -64,15 +64,36 @@
         hold: h.getContext('2d'),
         next: n.getContext('2d'),
       };
-      b.width = W * CELL; b.height = H * CELL;
-      h.width = 4 * CELL; h.height = 4 * CELL;
-      n.width = 4 * CELL; n.height = 3 * 4 * CELL; // three stacked 4x4 slots
+      // Back-buffers are allocated at devicePixelRatio and drawn through a
+      // base scale transform, so all drawing code stays in logical CELL
+      // units while the bitmap is crisp on retina/phone screens. The CSS
+      // display size is set separately (style.css), never inferred from
+      // the bitmap size.
+      const dpr = this._dpr = this._devicePixelRatio();
+      this._sizeCanvas(b, this._ctx.board, W * CELL, H * CELL, dpr);
+      this._sizeCanvas(h, this._ctx.hold, 4 * CELL, 4 * CELL, dpr);
+      this._sizeCanvas(n, this._ctx.next, 4 * CELL, 3 * 4 * CELL, dpr); // three stacked 4x4 slots
       this._ready = true;
       return this;
     },
 
+    _devicePixelRatio() {
+      const w = (typeof window !== 'undefined') ? window : null;
+      const dpr = (w && w.devicePixelRatio) || 1;
+      return Math.min(Math.max(dpr, 1), 3);
+    },
+
+    _sizeCanvas(canvas, ctx, logicalW, logicalH, dpr) {
+      canvas.width = Math.round(logicalW * dpr);
+      canvas.height = Math.round(logicalH * dpr);
+      if (ctx && ctx.setTransform) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    },
+
     // Draw one full frame from a game object. No-ops if the DOM isn't ready.
     frame(g) {
+      // A DPR change (window dragged to another monitor, browser zoom)
+      // re-allocates the back-buffers at the new density.
+      if (this._ready && this._devicePixelRatio() !== this._dpr) this._ready = false;
       this.setup();
       if (!this._ready) return;
       const c = this._ctx;

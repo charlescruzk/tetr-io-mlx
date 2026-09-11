@@ -343,3 +343,37 @@ in the resulting stack traces.
   layout at 390×844 with the touch bar *below* the board and nothing cut
   off; Esc/P shows the Pause overlay).
 - Commit: "Phase 16: fix next-queue slots, phone layout nesting, keyboard pause overlay"
+
+## Phase 17 — Mobile playability redesign (builder, superseded)
+
+Recorded in PROGRESS.md only; the layout it described was never applied
+because of a markup nesting error — see the Phase 17 post-mortem there and
+Phase 18 below.
+
+## Phase 18 — Mobile layout rebuilt and browser-verified, portrait + landscape
+
+Done by the coordinator session after the owner reported Phase 17
+unplayable on a phone. Root causes: a stray `</div>` in `index.html` that
+closed `.game-layout` before `#touch-controls` (so the CSS grid-area never
+applied — the Phase 16b fix's comment said "inside", the DOM said
+"sibling"), and `.game-layout` having no width as a flex item of `.screen`
+(so it shrink-wrapped to its content, 160px, collapsing the board to 2×2).
+
+What shipped (details in PROGRESS.md's Phase 18 entry): fixed nesting,
+two thumb clusters shared by both orientations, portrait grid with
+`aspect-ratio`-driven board sizing and a tablet width cap, landscape with
+height-derived board sizing and corner-pinned clusters, `safe center` +
+scroll on menu screens, canvases rendered at devicePixelRatio, and two
+`index.html` structure tests that fail on the Phase 17 markup.
+
+Verification standard this phase set, which later phases should keep:
+**measure the layout in a real browser at multiple sizes in both
+orientations** (Playwright + the coarse-pointer rules lifted out of their
+media query), not a code read. Check: no overflow, no element overlaps,
+board ratio exact, tap targets ≥44px, and touch buttons driving the game
+via real `TouchEvent`s.
+
+- **DoD**: all of the above measured green at 390×844, 375×667, 320-tall,
+  768×1024, 844×390, 667×375, 568×320, 1024×768; desktop unchanged;
+  `node tests/run.js` green including the structure guards.
+- Commit: "Phase 18: rebuild mobile layout (portrait + landscape), DPR-crisp canvases"

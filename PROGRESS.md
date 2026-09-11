@@ -5,7 +5,25 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 16 fixes DONE (2026-09-11) — 3 browser bugs fixed, re-check pending
+## Status: Phase 18 DONE (2026-09-11) — mobile layout rebuilt and browser-verified in both orientations
+
+Phase 17's mobile layout did not work on the owner's phone, and it was
+not a cache problem: `index.html` had a stray `</div>` that closed
+`.game-layout` before `#touch-controls`, so the Phase 16b "move it inside
+the grid" fix never applied (the comment said inside; the DOM said
+sibling), and `.game-layout` — a flex item of `.screen` — had no width, so
+it shrink-wrapped to 160px and the board collapsed to 2×2px. Phase 18
+(done by the project owner's coordinator session, not the builder) rebuilt
+the touch layout and verified it in Chromium with the coarse-pointer rules
+applied at 390×844, 375×667, 320-tall, 768×1024, 844×390, 667×375,
+568×320, 1024×768 — no overflow, no overlaps, ≥44px targets, board ratio
+exact, every touch button driving the game via real TouchEvents, HUD pause
+opening the overlay, menus fitting or scrolling (never clipping) in
+landscape. Canvases now render at devicePixelRatio (crisp on retina/phone).
+Two `index.html` structure tests guard the nesting bug (62/62 green).
+What still needs a real phone: safe-area insets around a notch, iOS
+Safari's URL-bar behaviour, and actual finger latency — see the Phase 18
+flag under "Needs human visual check".
 
 The page was opened in a real browser (Chromium via Playwright) and Phase
 13's fix is CONFIRMED: Play works, a game starts, gravity/DAS/hard drop/
@@ -223,6 +241,46 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       needs the owner's phone re-check (see the Phase 17 flag below) —
       including a cache-busting reload, since the first iPhone test may
       have been seeing stale cached HTML.
+      POST-MORTEM (Phase 18): it was not stale HTML. The markup had a stray
+      `</div>` closing `.game-layout` before `#touch-controls`, so this
+      whole CSS design was applied to a DOM it didn't match; and
+      `.game-layout` had no width inside `.screen`'s flex row, so it
+      shrink-wrapped to 160px. Superseded by Phase 18.
+- [x] Phase 18 — Mobile layout rebuilt + verified (portrait AND landscape).
+      MARKUP: nesting fixed (touch bar inside the grid, for real this
+      time); the 7 buttons regrouped into two thumb clusters
+      (`.touch-left`: ← → / ↓ wide; `.touch-right`: Hold ↺ / ↻ Drop) that
+      serve both orientations, same `data-action`s so touch.js and its
+      tests are untouched.
+      PORTRAIT: `.game-layout` is `width:100%; height:100%` of the fixed
+      screen (no shrink-wrap, no vh/dvh guesswork), grid `hud / hold|board|
+      next / touch`, explicit `grid-area` on every item (no auto-placement
+      luck), side columns `minmax(50px, 12vw)`, the board wrapper carries
+      `aspect-ratio: 1/2` so the board is height-bound on tablets and
+      width-bound on phones without ever distorting, top-aligned with the
+      panels; layout width capped so on a tablet the side panels hug the
+      board instead of drifting to the screen edges. 390×844 → board
+      250×498 (was 206×410 in Phase 14, 2×2 broken in 17).
+      LANDSCAPE: `hud (44px) / hold|board|next`, the board's width derived
+      from the viewport height (calc) and the canvas sized by height so it
+      cannot distort; the two clusters `position: fixed` in the bottom
+      corners (140px wide — chosen so group + clusters never overlap down
+      to 568×320); side canvases scale with `clamp(..vh..)`. Menus:
+      `align-items: safe center` + `overflow-y: auto` on non-game screens,
+      3-across mode cards in landscape — content centers when it fits and
+      scrolls when it doesn't, never clips the title.
+      RENDER: canvases allocate their bitmaps at devicePixelRatio (capped
+      3×) and draw through a base scale transform; drawing code unchanged
+      (logical CELL units). Display size now comes from CSS (desktop:
+      300×600 / 120×120 / 120×360 explicit) — previously the 300×600 bitmap
+      was upscaled on every retina screen, including desktop Macs. A DPR
+      change (monitor move / zoom) re-allocates.
+      VERIFIED in Chromium (coarse-pointer rules applied): sizes listed in
+      the Status header; real TouchEvents on every button; DAS/ARR on
+      soft-drop (4 rows in 260ms); HUD pause → overlay; 3× bitmap draws the
+      full field. Desktop 1200×900 unchanged. `node tests/run.js` 62/62
+      incl. two new index.html structure guards (the nesting one fails on
+      the Phase 17 markup, passes now).
 - [x] Grade A closeout — every line of CLAUDE.md's Grade A bar re-checked
       against the actual repo state this session:
       tests/run.js exits 0 (60 passed / 0 failed) and covers Board, Piece,
@@ -277,8 +335,25 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
 
 ## Needs human visual check
 
-**Phase 17 (mobile redesign) needs a real phone check — portrait AND
-landscape.** Open the game on a phone (hard-refresh first: pull down to
+**Phase 18 (mobile rebuild) — machine-verified in Chromium; needs only a
+real-device pass for what a desktop browser can't emulate.** Layout,
+sizing, touch dispatch, pause, menus, and DPR rendering were all measured
+in-browser at eight phone/tablet sizes in both orientations (see the Phase
+18 checklist entry). On an actual phone, check just:
+- Notch / home-indicator clearance (env(safe-area-inset-*) padding is set
+  but only a real device applies it): nothing hidden under the notch in
+  landscape, the bottom clusters sit above the home indicator.
+- iOS Safari URL-bar collapse: the game screen should track the visible
+  area with no jump or clipped controls (it uses height:100% of a fixed
+  inset:0 screen, which is what Safari resizes).
+- Finger feel: held soft-drop repeats smoothly; no double-fire on tap; no
+  page scroll/zoom while playing.
+- Crispness: cells should look sharp, not soft (bitmaps are now DPR-sized).
+
+**Phase 17 (mobile redesign) — SUPERSEDED by Phase 18; kept for history.**
+The flag below described a layout that was never actually applied (see the
+Phase 17 post-mortem). Original text:
+Open the game on a phone (hard-refresh first: pull down to
 reload, or use a private tab — the first iPhone test likely saw stale
 cached HTML). Verify:
 

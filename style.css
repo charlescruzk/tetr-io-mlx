@@ -311,14 +311,23 @@ body {
   text-align: center;
 }
 
+/* Display sizes are set in CSS: the canvas bitmaps are allocated at
+   devicePixelRatio (render.js) so they stay crisp on retina screens, which
+   means their intrinsic size can no longer drive layout. */
 .side-hold canvas,
 .side-next canvas {
+  display: block;
   background: var(--surface);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
 }
+#hold-canvas { width: 120px; height: 120px; }
+#next-canvas { width: 120px; height: 360px; }
 
 .board-wrap canvas {
+  display: block;
+  width: 300px;
+  height: 600px;
   background: var(--surface);
   border: 1px solid rgba(124, 92, 255, 0.35);
   border-radius: 8px;
@@ -468,25 +477,33 @@ body {
     -webkit-touch-callout: none;
     }
 
-  /* Show the touch-only controls. */
+  /* ---- Touch controls: two thumb clusters ----
+     Left thumb = movement (left / right, soft drop below), right thumb =
+     actions (hold / rotate CCW, rotate CW primary / hard drop). The same
+     two clusters serve portrait (side by side under the board) and
+     landscape (pinned to the bottom corners), so muscle memory carries
+     across a rotation. Buttons are >= 44px in both axes everywhere. */
   .touch-controls {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 0 12px 14px;
+    justify-content: center;
+    align-items: end;
+    gap: 14px;
     }
   .touch-pause { display: inline-block; }
 
-  .touch-row {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
+  .touch-cluster {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    flex: 1 1 0;
+    max-width: 190px;
+    min-width: 0;
     }
+  .tbtn-wide { grid-column: 1 / -1; }
 
   .tbtn {
-    flex: 1 1 0;
-    min-width: 44px;
-    min-height: 60px;
+    min-width: 0;
+    min-height: 56px;
     appearance: none;
     border: 1px solid rgba(124, 92, 255, 0.45);
     background: var(--surface-raised);
@@ -513,31 +530,39 @@ body {
     letter-spacing: 1px;
     }
 
-  /* --- in-game, PORTRAIT (Phase 17 redesign) ---
-     Three columns: hold | board | next, so the side panels flank the board
-     instead of burning their own full-width rows. Rows: HUD strip on top,
-     the game row fills every leftover pixel, touch controls pinned to the
-     bottom where thumbs live. Height is the dynamic viewport (dvh with a
-     vh fallback) so the collapsing iOS URL bar doesn't clip the controls,
-     and env() safe-area padding keeps everything clear of the notch/home
-     indicator. */
+  /* ---- In-game, PORTRAIT ----
+     Grid rows: HUD strip / game row (fills the rest) / touch clusters.
+     Columns: hold | board | next. The layout is a flex item of .screen, so
+     it MUST be told to fill the width — without width:100% it shrink-wraps
+     to its content and the board column collapses (the bug this replaced).
+     height:100% of the fixed, inset:0 screen tracks the real visible
+     viewport (URL bar collapse included) without vh/dvh guesswork. */
   .game-layout {
     display: grid;
-    grid-template-columns: minmax(48px, 76px) minmax(0, 1fr) minmax(48px, 76px);
+    width: 100%;
+    height: 100%;
+    /* On tablets the board is height-bound, so cap the layout's width to
+       roughly board + side panels + gaps and let .screen center it —
+       otherwise the side panels drift to the far screen edges. On phones
+       the cap is wider than the screen and never engages. */
+    max-width: calc((100vh - 200px) / 2 + 24vw + 40px);
+    max-width: calc((100dvh - 200px) / 2 + 24vw + 40px);
+    grid-template-columns: minmax(50px, 12vw) minmax(0, 1fr) minmax(50px, 12vw);
     grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
       "hud hud hud"
       "hold board next"
       "touch touch touch";
     gap: 10px;
-    height: 100vh;
-    height: 100dvh;
-    padding: calc(8px + env(safe-area-inset-top)) 10px
-             calc(8px + env(safe-area-inset-bottom));
+    padding: calc(6px + env(safe-area-inset-top))
+             calc(10px + env(safe-area-inset-right))
+             calc(8px + env(safe-area-inset-bottom))
+             calc(10px + env(safe-area-inset-left));
     }
   #screen-game { overflow: hidden; } /* the grid fits the viewport; no scroll */
-   /* Promote the panels' children (canvas/hud) to grid items so they can
-      occupy their grid areas without restructuring the shared DOM. */
+
+  /* Promote the side panels' children (canvas + HUD) to grid items so each
+     can take its own grid area without restructuring the desktop DOM. */
   .side-hold,
   .side-next { display: contents; }
   .side-hold .panel-label,
@@ -548,100 +573,155 @@ body {
     flex-direction: row;
     justify-content: center;
     align-items: stretch;
+    gap: 6px;
     margin-top: 0;
+    min-width: 0;
     }
-   /* Stat tiles share the row (pause + 4 stats); labels shrink so SCORE
-      never truncates to "SCO" on a 320px phone. */
   #hud .stat {
     flex: 1 1 0;
     min-width: 0;
     padding: 6px 8px;
+    gap: 0;
     }
   #hud .stat-label { font-size: 10px; letter-spacing: 0.5px; }
   #hud .stat-value { font-size: 16px; }
-   /* HUD pause button: inline with the stat tiles. */
   .touch-pause {
     flex: 0 0 auto;
-    align-self: center;
-    margin-left: 6px;
-    padding: 10px 14px;
+    align-self: stretch;
+    margin: 0;
+    padding: 0 12px;
+    min-height: 0;
     border-radius: 10px;
+    font-size: 13px;
     }
 
-  /* The grid item is the wrapper; the canvas centers inside it and scales
-     to whatever the 1fr row actually gives it (both maxes, ratio preserved,
-     so a tall narrow phone constrains by width and a squat one by height). */
+  /* The wrapper is the grid item and carries the board's 1:2 ratio: it is
+     as tall as the game row and as wide as that allows, clamped to the
+     column. Height-bound (short phone, tablet): the wrapper IS the board.
+     Width-bound (tall narrow phone): the wrapper is taller than the board
+     and centers it. Either way the canvas is 100% of the wrapper's width
+     with height following its own ratio, so it never distorts and it
+     upscales to use a tablet's space. */
   .board-wrap {
     grid-area: board;
+    aspect-ratio: 1 / 2;
+    height: 100%;
+    max-width: 100%;
+    justify-self: center;
     display: flex;
-    align-items: center;
+    align-items: flex-start;   /* top-aligned with the hold/next panels */
     justify-content: center;
     min-width: 0;
     min-height: 0;
     }
   #board-canvas {
     display: block;
-    max-width: 100%;
-    max-height: 100%;
-    width: auto;
+    width: 100%;
     height: auto;
+    max-width: none;
+    max-height: 100%;
     }
 
-   /* Side panels: fill their narrow columns, top-aligned next to the board
-      (hold is 1:1, next is 1:3 — the queue reads fine this small). */
-  #hold-canvas,
-  #next-canvas {
+  #hold-canvas {
+    grid-area: hold;
     width: 100%;
     height: auto;
     align-self: start;
+    justify-self: end;
+    }
+  #next-canvas {
+    grid-area: next;
+    width: 100%;
+    height: auto;
+    align-self: start;
+    justify-self: start;
     }
 
   #touch-controls { grid-area: touch; }
 
-  /* --- in-game, LANDSCAPE (Phase 17) ---
-     The board is height-starved in landscape, so: HUD strip stays on top,
-     the game row fills the rest, and the touch controls leave the flow
-     entirely — movement cluster pinned to the bottom-LEFT corner, action
-     cluster to the bottom-RIGHT corner, exactly under the thumbs that
-     hold the phone. */
+  /* ---- In-game, LANDSCAPE ----
+     Height is the scarce axis: HUD strip (fixed 44px) on top, the game row
+     takes the rest, and the touch clusters leave the flow to sit in the
+     bottom corners under the thumbs holding the phone. The board's width is
+     derived from the viewport height so the hold | board | next group is a
+     known size and can be centered as a unit; the canvas keeps its ratio
+     inside the wrapper regardless. Cluster width (140px) is chosen so the
+     group and both clusters coexist without overlap down to ~570px-wide
+     phones. */
   @media (orientation: landscape) {
     .game-layout {
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      grid-template-rows: auto minmax(0, 1fr);
+      max-width: none;
+      grid-template-columns: auto auto auto;
+      grid-template-rows: 44px minmax(0, 1fr);
       grid-template-areas:
         "hud hud hud"
         "hold board next";
+      justify-content: center;
+      gap: 8px 12px;
+      padding: calc(6px + env(safe-area-inset-top))
+               calc(10px + env(safe-area-inset-right))
+               calc(8px + env(safe-area-inset-bottom))
+               calc(10px + env(safe-area-inset-left));
       }
+    #hud { height: 44px; }
+    #hud .stat { padding: 3px 10px; }
+    #hud .stat-label { font-size: 9px; }
+    #hud .stat-value { font-size: 14px; }
+
+    .board-wrap {
+      aspect-ratio: auto;
+      height: 100%;
+      width: calc((100vh - 66px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2);
+      width: calc((100dvh - 66px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2);
+      }
+    /* Height is the binding axis here: size the canvas by it and let the
+       width follow its ratio, so a stray pixel in the wrapper's calc width
+       can never distort the board. */
+    #board-canvas { width: auto; height: 100%; max-width: none; max-height: none; }
+    /* Side panels scale with the viewport height (clamped) so they read
+       on a tablet without crowding the corner clusters on a short phone. */
+    #hold-canvas { width: auto; height: clamp(60px, 18vh, 120px); justify-self: end; }
+    #next-canvas { width: auto; height: clamp(120px, 36vh, 360px); justify-self: start; }
+
     #touch-controls { display: contents; }
-    .touch-row {
+    .touch-cluster {
       position: fixed;
       bottom: calc(10px + env(safe-area-inset-bottom));
-      gap: 12px;
+      width: 140px;
+      max-width: none;
+      z-index: 2;
       }
-    .touch-row:nth-of-type(1) { left: calc(12px + env(safe-area-inset-left)); }
-    .touch-row:nth-of-type(2) { right: calc(12px + env(safe-area-inset-right)); }
-    .tbtn {
-      flex: 0 0 auto;
-      min-width: 64px;
-      min-height: 56px;
-      padding: 0 16px;
-      }
-    #hold-canvas { width: auto; height: 72px; align-self: start; }
-    #next-canvas { width: auto; height: 132px; align-self: start; }
-    #hud .stat { padding: 4px 8px; }
-    #hud .stat-value { font-size: 14px; }
+    .touch-left  { left: calc(12px + env(safe-area-inset-left)); }
+    .touch-right { right: calc(12px + env(safe-area-inset-right)); }
+    .tbtn { min-height: 52px; font-size: 20px; }
     }
 
-  /* --- menus: full-width, roomy touch targets --- */
+  /* ---- Menus: full-width, roomy touch targets. `safe center` keeps the
+     content centered when it fits and top-aligned (scrollable) when it
+     doesn't, so nothing is ever clipped off the top in landscape. ---- */
+  .screen:not(#screen-game) {
+    align-items: safe center;
+    overflow-y: auto;
+    }
   .screen-inner { padding: 24px 16px; gap: 20px; }
   .menu-buttons { width: 100%; max-width: 340px; }
   .btn { min-height: 44px; padding: 12px 20px; }
   .seg-btn { min-height: 44px; padding: 10px 18px; }
   .toggle { min-height: 44px; }
-  .mode-cards { grid-template-columns: 1fr; gap: 12px; }
+  .mode-cards { grid-template-columns: 1fr; gap: 12px; width: 100%; max-width: 420px; }
   .mode-card { padding: 16px; }
   .overlay-inner { padding: 24px 20px; max-height: 92vh; overflow-y: auto; }
   .logo { font-size: 40px; }
   .screen-title { font-size: 26px; }
   .stat-value { font-size: 18px; }
+
+  @media (orientation: landscape) {
+    .screen-inner { padding: 14px 16px; gap: 12px; }
+    .logo { font-size: 30px; }
+    .screen-title { font-size: 22px; }
+    .mode-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 640px; }
+    .mode-card { padding: 12px; }
+    .menu-buttons { max-width: 320px; }
+    .btn { min-height: 44px; padding: 10px 18px; }
+    }
 }
