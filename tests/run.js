@@ -16,8 +16,8 @@ const Randomizer = require(path.join(__dirname, '..', 'js', 'randomizer.js'));
 // Phase 4a: core game loop. game.js is a DOM-free UMD module, so it
 // require()'s here exactly like the other logic modules.
 const Game = require(path.join(__dirname, '..', 'js', 'game.js'));
-// TODO(qwen, Phase 7): uncomment once js/scoring.js is implemented.
-// const Scoring = require(path.join(__dirname, '..', 'js', 'scoring.js'));
+// Phase 7: scoring + gravity curve.
+const Scoring = require(path.join(__dirname, '..', 'js', 'scoring.js'));
 // TODO(qwen, Phase 8): uncomment once js/modes.js is implemented.
 // const Modes = require(path.join(__dirname, '..', 'js', 'modes.js'));
 
@@ -418,10 +418,62 @@ test('a top-out (spawn collision) sets state=over / result=lost', () => {
 });
 
 // ---------------------------------------------------------------- Phase 7
-// Scoring — TODO(qwen): add tests once js/scoring.js is implemented and
-// the require at the top of this file is uncommented. Cover: line-clear
-// point values at a couple of levels, soft/hard drop points, and that
-// Scoring.gravityForLevel(level) is monotonically decreasing.
+// Scoring — point table + gravity curve (js/scoring.js).
+
+test('line-clear points at level 1 match the SPEC table', () => {
+  assertEqual(Scoring.linesScore(1, 1), 100, 'single should be 100 at level 1');
+  assertEqual(Scoring.linesScore(2, 1), 300, 'double should be 300 at level 1');
+  assertEqual(Scoring.linesScore(3, 1), 500, 'triple should be 500 at level 1');
+  assertEqual(Scoring.linesScore(4, 1), 800, 'tetris should be 800 at level 1');
+});
+
+test('line-clear points scale by level', () => {
+  // 5x the base value at level 5.
+  assertEqual(Scoring.linesScore(1, 5), 500, 'single at level 5 = 100*5');
+  assertEqual(Scoring.linesScore(2, 5), 1500, 'double at level 5 = 300*5');
+  assertEqual(Scoring.linesScore(3, 5), 2500, 'triple at level 5 = 500*5');
+  assertEqual(Scoring.linesScore(4, 5), 4000, 'tetris at level 5 = 800*5');
+});
+
+test('line-clear points clamp the level to a minimum of 1', () => {
+  assertEqual(Scoring.linesScore(2, 0), 300, 'level 0 behaves like level 1');
+  assertEqual(Scoring.linesScore(2, -3), 300, 'a negative level behaves like level 1');
+});
+
+test('zero or unknown line counts score nothing', () => {
+  assertEqual(Scoring.linesScore(0, 3), 0, 'no lines cleared = 0 points');
+  assertEqual(Scoring.linesScore(5, 3), 0, 'more than 4 lines has no base value');
+});
+
+test('soft drop is 1 pt/cell and hard drop is 2 pts/cell', () => {
+  assertEqual(Scoring.softDropScore(1), 1, 'one soft-drop cell = 1 point');
+  assertEqual(Scoring.softDropScore(12), 12, 'soft drop is 1 pt/cell');
+  assertEqual(Scoring.hardDropScore(1), 2, 'one hard-drop cell = 2 points');
+  assertEqual(Scoring.hardDropScore(12), 24, 'hard drop is 2 pts/cell');
+});
+
+test('gravityForLevel is 1000ms at level 1 and decreases as level rises', () => {
+  assertEqual(Scoring.gravityForLevel(1), 1000, 'level 1 gravity = 1000ms');
+  assert(Scoring.gravityForLevel(5) < Scoring.gravityForLevel(1),
+    'level 5 must be faster than level 1');
+  assert(Scoring.gravityForLevel(9) < Scoring.gravityForLevel(5),
+    'level 9 must be faster than level 5');
+});
+
+test('gravityForLevel is monotonically non-increasing and floors at 50ms', () => {
+  // Non-increasing across a wide range (the 50ms floor makes it flat near the top).
+  let prev = Scoring.gravityForLevel(0);
+  for (let lv = 1; lv <= 30; lv++) {
+    const cur = Scoring.gravityForLevel(lv);
+    assert(cur <= prev, `gravity at level ${lv} (${cur}) must not exceed level ${lv - 1} (${prev})`);
+    prev = cur;
+  }
+  // Strictly decreasing in the region above the floor.
+  assert(Scoring.gravityForLevel(5) > Scoring.gravityForLevel(15),
+    'gravity should still be speeding up between levels 5 and 15');
+  // The floor is 50ms — high levels are clamped, not sub-50.
+  assertEqual(Scoring.gravityForLevel(50), 50, 'gravity floors at 50ms for very high levels');
+});
 
 // ---------------------------------------------------------------- Phase 8
 // Modes — TODO(qwen): add tests once js/modes.js is implemented and the
