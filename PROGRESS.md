@@ -5,14 +5,14 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 5 done (needs human visual check)
+## Status: Phase 6 done (needs human visual check)
 
 Phases 0–3 complete (Board, Piece, Randomizer). Phases 4a (core game loop),
-4b (SRS wall kicks), and 5 (rendering) are implemented. 4a/4b are verified
-(`node tests/run.js` → 32 passed / 0 failed) and committed. Phase 5 (render.js)
-is a browser-only canvas module: `node -c` clean + code read back, but it has
-NO test-runner coverage, so it needs a human to open index.html and eyeball it
-(see "Needs human visual check" below). Next: Phase 6 (Input).
+4b (SRS wall kicks), 5 (rendering), and 6 (input) are implemented. 4a/4b are
+verified (`node tests/run.js` → 32 passed / 0 failed) and committed. Phases 5
+and 6 are browser-only modules: `node -c` clean + code read back, but they have
+NO test-runner coverage, so they need a human to open index.html and drive a
+real game (see "Needs human visual check" below). Next: Phase 7 (Scoring).
 
 Note: the earlier session left Phase 3 (randomizer.js) and the Phase 7/8
 modules (scoring.js, modes.js) implemented but UNCOMMITTED. This session
@@ -35,7 +35,8 @@ Phase 7/8 modules stay uncommitted until their tests are added (Phases 7/8).
       floor kick, all-kicks-fail, O never rotates). Verified 32/32.
 - [x] Phase 5 — Rendering (js/render.js: board + active + ghost + next×3 + hold;
       needs human visual check — no test-runner coverage for canvas/DOM)
-- [ ] Phase 6 — Input
+- [x] Phase 6 — Input (js/input.js keyboard + DAS/ARR; needs human visual
+      check — no test-runner coverage for DOM/event loop)
 - [ ] Phase 7 — Scoring + gravity curve (js/scoring.js written; tests pending)
 - [ ] Phase 8 — Modes (js/modes.js written; tests pending)
 - [ ] Phase 9 — UI screens
@@ -66,6 +67,28 @@ console once the DOM is up, and verify:
 - No `NaN`/`undefined` cell coordinates (would show as a black or misplaced
   block). Watch the very first piece — it spawns in the buffer and should only
   become visible as it falls past row 0.
+
+Phase 6 (input.js) — no test-runner coverage possible (DOM key events + rAF
+DAS/ARR loop). `node -c` is clean and the code was read back, but a human must
+open `index.html`, focus the window, and play. input.js is wired to the game in
+Phase 9's main.js, so for now this is a *unit* check — call
+`Tetris.Input.bind(Tetris.Game.create())` from the console once the DOM is up,
+then verify:
+
+- **DAS/ARR feel**: holding ← or → moves one cell immediately, then holds ~160ms
+   (DAS), then auto-repeats every ~40ms (ARR). Same for ↓ (soft drop). Releasing
+  and re-pressing restarts the delay. The OS key-repeat must NOT cause faster
+  or jittery movement (it's suppressed via `e.repeat`).
+- **Single-shot keys**: rotate (↑ / X CW, Z CCW), hard drop (Space), and hold
+  (C / Shift) each fire exactly once per physical press.
+- **Hold once-per-piece**: the first hold swaps the piece; a second hold before
+   the next lock is ignored; holding is allowed again after a lock.
+- **Pause**: Escape / P pauses when playing and resumes when paused; it's a
+   no-op when the game is over/won.
+- **No stray default actions**: arrow keys don't scroll the page, Space doesn't
+   scroll — game keys `preventDefault()`, everything else does.
+- The held-key auto-repeat loop stops cleanly on `unbind()` / when disabled
+  (Phase 9 gates it on the active screen).
 
 ## Blocked
 
