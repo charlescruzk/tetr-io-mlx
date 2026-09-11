@@ -5,14 +5,26 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 12 done — build complete (final pass)
+## Status: regression found — Phase 13 (bug fix) is next, then new scope (14, 15)
 
-All 13 phases (0–12, 4a/4b counted separately) are implemented and committed,
-one commit each. Logic is verified by the test runner (45 passed / 0 failed).
-The browser-only phases (5, 6, 9, 10, 11) have no test-runner coverage and are
-flagged "needs human visual check" below — that is the only open gate on the
-build; everything is either checked off or truthfully flagged, nothing silently
-missing.
+Phases 0–12 were previously marked complete, but a real user opened
+`index.html` by double-click exactly as instructed and Play did nothing —
+none of the menu buttons work. This is exactly the gap "needs human visual
+check" was flagging: those phases were code-reviewed and statically checked,
+never actually opened in a browser by an agent. See PLAN.md Phase 13 for the
+likely root cause (a string-id/element mismatch in `js/ui.js`'s `_on`/`_bind`)
+and required fix + hardening. **Do Phase 13 before anything else** — new
+feature work on top of a build where the menu doesn't open is pointless.
+
+Two new phases were added after Phase 13, expanding scope beyond the
+original 12-phase build (approved by the project owner): Phase 14 (mobile
+responsive layout + real touch controls — previously out of scope, SPEC.md
+updated) and Phase 15 (particle effects layered on top of Phase 11's
+existing juice). See SPEC.md's new "Mobile & touch" and "Juice / particle
+effects" sections for the requirements.
+
+Phases 0–12 (the original build) history below is kept as-is for reference;
+it is no longer the full picture of what's needed to call this done.
 
 Phases 0–3 complete (Board, Piece, Randomizer). Phases 4a (core game loop),
 4b (SRS wall kicks), 5 (rendering), 6 (input), 7 (scoring), 8 (modes), 9
@@ -92,6 +104,9 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       (done or truthfully flagged "needs human visual check"). README.md's
       how-to-run was checked and is unchanged (still "open index.html"), so it
       was not edited.
+- [ ] Phase 13 — Fix: dead menu buttons on fresh open (priority — do first)
+- [ ] Phase 14 — Mobile responsive layout + touch controls
+- [ ] Phase 15 — Particle effects / juice
 
 ## Needs human visual check
 

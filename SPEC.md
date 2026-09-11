@@ -128,10 +128,58 @@ reference numbers.
 - Independent on/off toggles for music and SFX in Settings, persisted to
   `localStorage`, applied immediately.
 
+## Mobile & touch (in scope — see PLAN.md Phase 14)
+
+The game must be playable, not just viewable, on a phone: responsive layout
+plus real touch controls, not a scaled-down desktop page a phone happens to
+render.
+
+- **Layout**: below a touch/narrow breakpoint (use a `(hover: none) and
+  (pointer: coarse)` media query, not just a width check — a touch laptop
+  shouldn't get the phone layout, a narrow desktop window should still get
+  keyboard controls), the three-column game screen (hold | board | next+HUD)
+  stacks vertically: HUD row, board, hold+next row, touch controls. The board
+  scales via CSS to fit the viewport width while preserving its aspect ratio
+  — never causes horizontal page scroll. Every screen (Home, Mode Select,
+  Settings, Pause, Game Over) reflows too: full-width buttons, no overflow,
+  minimum ~44px touch targets.
+- **Touch controls**: on-screen buttons, not gesture-only (gestures are easy
+  to get subtly wrong and hard to verify without a real device) — Left,
+  Right, Rotate CW (primary), Rotate CCW (secondary, smaller), Soft Drop
+  (press-and-hold, same DAS/ARR repeat as the keyboard), Hard Drop, and Hold.
+  They call the exact same `g.move` / `g.rotate` / `g.softDrop` /
+  `g.hardDrop` / `g.hold` action surface as the keyboard — a new touch layer
+  next to `input.js`, not a second copy of the game logic. Use
+  `touchstart`/`touchend` with `preventDefault()` (avoids the ~300ms tap
+  delay and the synthetic-click double-fire some browsers still do). Touch
+  controls are hidden on non-touch devices; keyboard controls keep working
+  everywhere they already do.
+- Pause must be reachable one tap away at all times during play (a visible
+  pause button in the mobile HUD, not just the Esc/P key).
+
+## Juice / particle effects (in scope — see PLAN.md Phase 15)
+
+Canvas-drawn particles, layered on top of Phase 11's existing juice (board
+shake on hard drop, white flash on line clear) — not a replacement for it,
+and no new library or CDN dependency (same hard constraint as the rest of
+the build: file:// only, no external assets).
+
+- **Line clear**: small square particles in the row's own cell colors burst
+  outward from the cleared row(s) with a touch of gravity and fade-out.
+- **Tetris (4-line clear)**: a bigger, showier version — more particles,
+  longer-lived, reads as clearly more exciting than a single-line clear.
+- **Hard drop**: a small dust/impact puff at the piece's landing cells,
+  alongside the existing board shake.
+- Keep the particle system pooled/bounded (a fixed max count, oldest culled
+  first) — it must not tank the frame rate on a phone. The particle sim can
+  live in `render.js` or a new `js/particles.js`; either way it's browser-
+  only (no dual-export needed) and reads off the same model signals Phase 11
+  already uses (`g.hardDropAt`, `g.lastEvents`) rather than adding new event
+  plumbing to `game.js`.
+
 ## Explicitly out of scope for this build
 
 - T-spin detection/scoring, back-to-back bonus, combo bonus
 - Key rebinding
-- Mobile/touch controls
 - Multiplayer, leaderboards, accounts
 - Any network calls

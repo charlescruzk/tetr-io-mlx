@@ -178,3 +178,94 @@ only if how-to-run changed (it shouldn't — still just open `index.html`).
 
 - **DoD**: clean test run, `PROGRESS.md` fully accounted for.
 - Commit: "Phase 12: build complete"
+
+## Phase 13 — Fix: Play does nothing on a fresh `index.html` open (do this first)
+
+A real user opened `index.html` by double-click exactly as instructed and
+**Play did nothing** — none of the menu buttons work. This slipped past
+every prior phase because Phases 5/6/9/10/11 were all only *code-reviewed*
+and flagged "needs human visual check," never actually opened in a browser
+by an agent (no browser tool was available in those sessions). This is a
+real regression in a build that PROGRESS.md currently calls "complete" —
+treat it as priority zero, before any new feature work.
+
+Likely root cause, from a static read of `js/ui.js`: `_bind()` calls the
+`on(...)` helper with plain string element ids for most buttons
+(`on('btn-play', ...)`, `on('btn-settings-home', ...)`, etc.), but `_on(el,
+fn)` calls `el.addEventListener(...)` directly — it never resolves a string
+id to an element via `document.getElementById`. The two other call sites in
+`_bind()` (the difficulty-segment loop and the mode-card loop) pass real
+DOM elements, which is why the mismatch wasn't obvious from a code read.
+If that's right, the very first `on('btn-play', ...)` call throws a
+`TypeError` synchronously, which aborts the rest of `_bind()` — and since
+`main.js`'s `boot()` calls `T.UI.init()` with no try/catch, the exception
+propagates all the way out and the `requestAnimationFrame` render loop
+never even starts. That would explain every button being dead, not just
+Play, and no visible error banner (the home screen renders fine from the
+raw HTML/CSS regardless, since `#screen-home` has no `hidden` class by
+default).
+
+Verify this independently — don't just trust the paragraph above — and fix
+whatever the real cause turns out to be:
+
+- Confirm (or rule out) the `_on`/`_bind` mismatch by reading the current
+  `js/ui.js` yourself.
+- Fix it: `_on` should resolve a string argument via
+  `document.getElementById` before attaching the listener (accept either a
+  string id or an already-resolved element, since both call shapes are
+  used).
+- **Harden against the same failure class recurring silently**: wrap
+  `boot()` in `main.js` in a try/catch that both `console.error`s the
+  failure and renders a visible on-page error state (not a silently dead
+  page) if initialization throws. A future init bug should fail loudly.
+- If you have any way to actually load the page (a browser tool, or ask the
+  user to confirm), use it — this is exactly the kind of bug that code
+  review alone already missed once. If you don't, be explicit in
+  `PROGRESS.md` that this still needs a real click-test, the same honest
+  flag that should have been there before.
+
+- **DoD**: root cause identified and fixed (not just papered over), the
+  hardening above in place, `node tests/run.js` still green, and a specific
+  "needs human visual check: click Play, confirm every button in
+  PLAN.md/PROGRESS.md's existing Phase 9 checklist actually works" flag in
+  `PROGRESS.md`.
+- Commit: "Phase 13: fix dead menu buttons (ui.js _on/_bind mismatch)"
+
+## Phase 14 — Mobile responsive layout + touch controls
+
+Per SPEC.md's new "Mobile & touch" section. Two parts, both required:
+
+1. **Responsive layout** for every screen (not just in-game) below a
+   `(hover: none) and (pointer: coarse)` breakpoint, board scaled to fit
+   width via CSS with its aspect ratio preserved, no horizontal scroll
+   anywhere, ~44px minimum touch targets.
+2. **On-screen touch controls** (Left, Right, Rotate CW, Rotate CCW, Soft
+   Drop with hold-repeat, Hard Drop, Hold, Pause) wired to the same
+   `g.move`/`g.rotate`/`g.softDrop`/`g.hardDrop`/`g.hold` surface `input.js`
+   already uses — don't duplicate game-action logic, add a thin touch layer
+   next to it. `touchstart`/`touchend` with `preventDefault()`.
+
+No test-runner coverage (DOM/CSS/touch events). Static-check with `node -c`
+on any new/changed JS, then a specific "needs human visual check" note in
+`PROGRESS.md`: what to open dev tools' device toolbar to (a phone-width
+viewport, e.g. 390×844), what to click-simulate for each touch control, and
+that keyboard controls still work unchanged on desktop widths.
+
+- **DoD**: static check clean, flag written, keyboard path untouched.
+- Commit: "Phase 14: mobile responsive layout + touch controls"
+
+## Phase 15 — Particle effects / juice
+
+Per SPEC.md's new "Juice / particle effects" section: line-clear particles,
+a bigger Tetris burst, a hard-drop impact puff — layered on top of Phase
+11's existing shake/flash, pooled/bounded so it can't tank frame rate,
+canvas-only (no new library, no CDN).
+
+No test-runner coverage (canvas animation). Static-check + a specific
+"needs human visual check" note: what triggers each effect, how long it
+should last, that a fresh board never spawns particles, and a rough frame-
+rate sanity check (should still feel smooth on a phone-class device, not
+just desktop).
+
+- **DoD**: static check clean, flag written.
+- Commit: "Phase 15: particle effects"
