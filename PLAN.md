@@ -269,3 +269,77 @@ just desktop).
 
 - **DoD**: static check clean, flag written.
 - Commit: "Phase 15: particle effects"
+
+## Phase 16 — Fixes from the first real browser click-through (2026-09-11)
+
+The page was finally opened in a real browser (Chromium via Playwright,
+served over localhost — identical code path to file://, plain script tags).
+The good news first, so nobody re-verifies what's already confirmed:
+Play → Mode Select → game start all work; gravity, DAS/ARR repeat, hard
+drop scoring (+2/cell), a real line clear (500 × level 5 + drop points =
+544, event carries rows/rowCells), the Tetris particle burst (looks right:
+row-colored squares + white sparkles), pause freezing the clock, Settings
+opened from Pause returning to Pause, and localStorage persistence were
+all exercised end-to-end and behaved. `node tests/run.js` is 59/59.
+
+Three real bugs were found. Each is root-caused below — verify it yourself
+against the current file, then fix it.
+
+**16a — Next queue draws all three pieces overlapping in the top slot
+(Phase 5 bug, `js/render.js`).** `_drawNext` passes the slot index `i`
+(0, 1, 2) as `rowSlot` to `_drawPieceCentered`, but that helper treats
+`rowSlot` as a *cell* row (`oy = rowSlot * CELL + ...`), while the slot
+border is drawn at `i * slot * CELL` (slot = 4 cells). So piece `i` is
+drawn one cell lower than the previous one instead of one *slot* lower —
+all three land in the first 4×4 box, overlapping, and slots 2–3 stay
+empty. Fix: pass `i * slot` as the row (or change the helper's contract);
+`_drawHold` passes 0 so it's unaffected. This is visible in every game
+within one second of starting; it was never caught because no session had
+looked at the page.
+
+**16b — Phone layout is off-screen: touch controls sit beside the board,
+not below it (Phase 14 bug, `index.html` + `style.css`).** In
+`index.html`, `#touch-controls` is a *sibling* of `.game-layout` (both are
+direct children of `#screen-game`), but the coarse-pointer CSS assigns it
+`grid-area: touch` as if it were inside the `.game-layout` grid. Outside
+the grid that declaration does nothing, so `#screen-game`'s flex row
+(`.screen { display:flex; align-items:center; justify-content:center }`,
+default `flex-direction: row`) places the touch bar *beside* the game
+layout; the pair is wider than a 390px phone, and flex-centering pushes
+`.game-layout` to x = −64 — board, HUD, and the pause button are all cut
+off at the left edge. Measured at a 390×844 viewport with the coarse-
+pointer rules applied. Fix: move `#touch-controls` inside `.game-layout`
+so `grid-area: touch` actually applies (preferred — it's what the CSS
+already assumes), or give `#screen-game` `flex-direction: column` in the
+coarse block. While in there: `grid-area: board` is set on `#board-canvas`
+but the grid item is its wrapper `.board-wrap` (not `display: contents`),
+so the board is only landing in the right place by auto-placement luck —
+put `grid-area: board` on `.board-wrap`. Note the board *does* scale
+correctly under the coarse rules (220×439 at 390px wide, no vertical
+scroll) — the scaling is right, the placement isn't.
+
+**16c — Keyboard pause (Esc / P) freezes the game but never shows the
+Pause overlay (Phase 9 bug, `js/main.js`).** `frame()` reads
+`const before = g.state` at the top of the frame, but the keypress already
+set `state = 'paused'` between frames, so by the next frame `before` is
+already `'paused'` and the `if (before === 'playing')` branch — the only
+place `T.UI.openPause()` is called — is skipped. Verified: 1.5s after
+pressing P, `state === 'paused'` and the overlay is still hidden; the user
+sees a frozen board with no menu. (The Pause *button* path works because
+`ui.js` opens the overlay itself; only the keyboard path is broken.) Fix:
+track the previous frame's state across frames (e.g. a module-level
+`lastState`) and open the overlay on any `playing → paused` transition
+regardless of what triggered it. Add a smoke test for it — the existing
+"one rAF frame runs cleanly" test can't see this.
+
+Not a bug, for the record: during the click-through, moves and a hold
+fired that no automation sent — those were real keyboard events from the
+owner pressing keys in the Playwright window. DAS/ARR was visibly correct
+in the resulting stack traces.
+
+- **DoD**: all three fixed, `node tests/run.js` green with a new test for
+  16c, and an updated "needs human visual check" note naming exactly the
+  three things to re-check (Next queue shows 3 separate pieces; phone
+  layout at 390×844 with the touch bar *below* the board and nothing cut
+  off; Esc/P shows the Pause overlay).
+- Commit: "Phase 16: fix next-queue slots, phone layout nesting, keyboard pause overlay"

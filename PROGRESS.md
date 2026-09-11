@@ -5,7 +5,18 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phases 13–15 done (2026-09-11) — awaiting a human click-through
+## Status: browser click-through DONE (2026-09-11) — Phase 16 fixes are next
+
+The page was finally opened in a real browser (Chromium via Playwright).
+Phase 13's fix is CONFIRMED: Play works, a game starts, gravity/DAS/hard
+drop/line clear/particles/pause-clock/settings-persistence all behaved
+end-to-end. Three real bugs were found and root-caused — see PLAN.md
+Phase 16 (16a next-queue overlap in render.js, 16b phone layout off-screen
+because #touch-controls is outside the grid it's assigned to, 16c keyboard
+pause never opens the overlay because main.js detects the transition
+within a single frame). Do Phase 16 next. The "Needs human visual check"
+flags for Phases 5/6/9/10/11/13 below are now largely discharged by that
+click-through; 14 and 15 still need a re-check after 16b/16a land.
 
 Phase 13 (the dead-menu-buttons regression) is FIXED and committed. There
 were TWO root causes, not the one PLAN.md predicted: (1) the predicted
@@ -203,6 +214,11 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       fully verify — those all carry specific "needs human visual check"
       notes below and should be clicked through by a human before calling
       this build done-done.
+- [ ] Phase 16 — Fixes from the first real browser click-through: 16a
+      next-queue slot overlap (render.js), 16b phone layout off-screen
+      (#touch-controls outside the grid it's assigned to), 16c keyboard
+      pause never opens the overlay (main.js same-frame transition check).
+      All three root-caused in PLAN.md Phase 16.
 
 ## Needs human visual check
 
