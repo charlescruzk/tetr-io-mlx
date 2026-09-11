@@ -543,6 +543,56 @@ test('getConfig throws on an unknown mode or difficulty', () => {
   assertThrows(() => Modes.getConfig('classic', 'medium'), 'unknown difficulty');
 });
 
+// ---------------------------------------------------------------- Phase 15
+// Model signals for the render-side particle system (js/particles.js):
+// the lineClear event now carries the cleared rows + their cell letters,
+// and hardDrop records where the piece landed. Both are pure model data.
+
+test('a line-clear event carries the cleared rows and their cell letters', () => {
+  const g = Game.create();
+  const last = Board.HEIGHT + Board.BUFFER - 1;
+  // fill the bottom row except column 0, then drop a vertical I into it
+  for (let x = 1; x < Board.WIDTH; x++) g.board[last][x] = 'I';
+  g.current = { type: 'I', rotation: 1, x: -2, y: 0 };
+  g.lockResets = 0;
+  g.hardDrop();
+  assertEqual(g.lastEvents.type, 'lineClear', 'the drop should clear one line');
+  assertEqual(g.lastEvents.lines, 1, 'exactly one line cleared');
+  assert(Array.isArray(g.lastEvents.rows) && g.lastEvents.rows.length === 1,
+    'rows should list exactly the cleared row');
+  assertEqual(g.lastEvents.rows[0], last, 'the cleared row should be the bottom row');
+  assert(g.lastEvents.rowCells[0].every((c) => c !== null),
+    'every cleared cell should carry its piece letter for particle colors');
+  });
+
+test('a Tetris event carries all four cleared rows', () => {
+  const g = Game.create();
+  const bottom = Board.HEIGHT + Board.BUFFER - 1;
+  for (let row = bottom - 3; row <= bottom; row++) {
+    for (let x = 1; x < Board.WIDTH; x++) g.board[row][x] = 'Z';
+    }
+  g.current = { type: 'I', rotation: 1, x: -2, y: 0 };
+  g.lockResets = 0;
+  g.hardDrop();
+  assertEqual(g.lastEvents.type, 'lineClear', 'four rows should clear');
+  assertEqual(g.lastEvents.lines, 4, 'the event should report a Tetris');
+  assertEqual(g.lastEvents.rows.length, 4, 'all four row indices should be listed');
+  assertEqual(g.lastEvents.rowCells.length, 4, 'each cleared row should have its cells');
+  });
+
+test('hardDrop records a landing snapshot matching the locked cells', () => {
+  const g = Game.create();
+  assert(g.hardDrop() > 0, 'the piece should drop');
+  const landing = g.hardDropLanding;
+  assert(landing && landing.type, 'hardDropLanding should be recorded');
+  const cells = Piece.getCells(landing.type, landing.rotation, landing.x, landing.y);
+  assertEqual(cells.length, 4, 'the landing piece has 4 cells');
+  for (const [cx, cy] of cells) {
+    assertEqual(g.board[cy][cx], landing.type,
+      'every landing cell should be locked into the board');
+    }
+  });
+
 // ---------------------------------------------------------------- Phase 13
 // UI wiring smoke test (js/ui.js + js/main.js) with minimal DOM stubs.
 //
@@ -679,7 +729,12 @@ function installDomStubs() {
 // replaces with no-op stubs (their real behavior is Phase 6/10's concern).
 global.Tetris = global.Tetris || {};
 global.Tetris.Input = { setEnabled: () => {}, bind: () => {} };
-global.Tetris.Render = { frame: () => {} };
+global.Tetris.Render = {
+  frame: () => {},
+  CELL: 30,
+  COLORS: { I: '#33e0ff', O: '#ffd93d', T: '#b57cff', S: '#3ddc84',
+            Z: '#ff5a5a', J: '#4d7bff', L: '#ff9f43' },
+  };
 // game.js exports via module.exports in Node and only attaches
 // Tetris.Game in the browser — bridge it so the UI layer can start games.
 global.Tetris.Game = Game;
@@ -794,6 +849,39 @@ test('touch: presses are no-ops when the layer is disabled', () => {
   dom.touchEnd(tbtn('cw'));
   assertEqual(g.current.rotation, rotation, 'a disabled press must do nothing');
   UI._syncInput(); // restore enabled state for any later tests
+  });
+
+// ---------------------------------------------------------------- Phase 15
+// Particle pool (js/particles.js) — pool bounds + expiry are DOM-free math,
+// so they smoke-test in Node with a stub drawing context. The *look* of the
+// particles stays a human visual check (PROGRESS.md).
+
+require(path.join(__dirname, '..', 'js', 'particles.js'));
+const Particles = global.Tetris.Particles;
+global.Tetris.Piece = Piece; // particles.js reads Piece for the drop puff
+
+test('particles: the pool is bounded at MAX, oldest culled first', () => {
+  const now = 1000;
+  const last = Board.HEIGHT + Board.BUFFER - 1;
+  const fullRow = new Array(Board.WIDTH).fill('I');
+  // ~2 particles × 10 cells × 1 row = ~20 per spawn; 20 spawns ≈ 400 > MAX.
+  for (let i = 0; i < 20; i++) {
+    Particles.spawnLineClear([last], [fullRow], false, now + i);
+    }
+  const n = Particles.count(now + 100);
+  assert(n <= Particles.MAX, `pool must stay bounded (${n} > MAX ${Particles.MAX})`);
+  assertEqual(n, Particles.MAX, 'the ring should have culled the oldest to stay at MAX');
+  });
+
+test('particles: they expire after their life and draw() reclaims the slots', () => {
+  const last = Board.HEIGHT + Board.BUFFER - 1;
+  Particles.spawnLineClear([last], [new Array(Board.WIDTH).fill('T')], true, 1000);
+  assert(Particles.count(1100) > 0, 'particles should be alive right after spawning');
+  assertEqual(Particles.count(1000 + 1500), 0,
+    'all particles must expire within their max life (~1.1s)');
+  const stubCtx = { fillRect: () => {}, globalAlpha: 1 };
+  Particles.draw(stubCtx, 1000 + 1500); // must not throw; reclaims slots
+  assertEqual(Particles.count(1000 + 1500), 0, 'nothing resurrects after expiry');
   });
 
 test('a failed boot() renders a visible on-page error (hardening check)', () => {

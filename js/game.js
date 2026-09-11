@@ -185,6 +185,15 @@
     if (cells > 0) g.score += Scoring.hardDropScore(cells);
     emit(g, 'harddrop');
     g.hardDropAt = (g.hardDropAt || 0) + 1; // render.js pulses the board on this
+     // Phase 15: snapshot where the piece landed (pre-lock position), so the
+     // render side can spawn its impact puff here without new event plumbing
+     // — the model just stores data it already has; it computes nothing extra.
+    g.hardDropLanding = {
+      type: g.current.type,
+      rotation: g.current.rotation,
+      x: g.current.x,
+      y: g.current.y,
+      };
     lockAndNext(g);
     return cells;
   }
@@ -232,12 +241,22 @@
     const full = Board.findFullRows(g.board);
     g.lastEvents = [];
     if (full.length) {
+       // Phase 15: capture the cleared rows' indices + cell letters BEFORE the
+       // collapse, so render-side particles can burst in the row's own colors.
+       // Same existing lastEvents payload, extended — no new event plumbing.
+      const rowCells = full.map((r) => g.board[r].slice());
       Board.clearRows(g.board, full);
       g.linesCleared += full.length;
       g.score += Scoring.linesScore(full.length, g.level);
       g.level = g.config.levelForLines(g.linesCleared);
       if (g.config.rampsWithLevel) g.gravityMs = Scoring.gravityForLevel(g.level);
-      g.lastEvents = { type: 'lineClear', lines: full.length, score: g.score };
+      g.lastEvents = {
+        type: 'lineClear',
+        lines: full.length,
+        score: g.score,
+        rows: full.slice(),
+        rowCells: rowCells,
+        };
         // 4 lines is a Tetris (distinct, bigger sound); 1–3 is a line clear.
       emit(g, full.length === 4 ? 'tetris' : 'lineclear');
       if (g.level > prevLevel) emit(g, 'levelup');

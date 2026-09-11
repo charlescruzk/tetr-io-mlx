@@ -92,6 +92,9 @@
         this._drawGhost(c.board, g.current, g.ghostY());
         this._drawActive(c.board, g.current);
        }
+       // Phase 15: particles draw inside the shake transform, so a burst
+       // moves with the field during the hard-drop pulse.
+      if (T.Particles) T.Particles.draw(c.board, now);
       c.board.restore();
        // A line clear flashes a white wash over the field, fading out.
       if (now < this._flashUntil) {
@@ -116,11 +119,22 @@
       if (g.hardDropAt != null && g.hardDropAt !== this._lastHardDrop) {
         this._lastHardDrop = g.hardDropAt;
         this._pulseUntil = now + this._pulseMs;
+         // Phase 15: an impact puff where the piece landed, alongside the shake.
+        if (T.Particles && g.hardDropLanding) {
+          T.Particles.spawnHardDrop(g.hardDropLanding, now);
+          }
          }
       if (g.lastEvents !== this._lastEvents) {
         this._lastEvents = g.lastEvents;
         if (g.lastEvents && g.lastEvents.type === 'lineClear') {
           this._flashUntil = now + this._flashMs;
+           // Phase 15: a burst in the cleared rows' own cell colors — bigger
+           // and showier for a Tetris (4 lines).
+          if (T.Particles) {
+            T.Particles.spawnLineClear(
+              g.lastEvents.rows, g.lastEvents.rowCells,
+              g.lastEvents.lines === 4, now);
+            }
           }
         }
      },

@@ -153,9 +153,56 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       touch.js's real listeners in Node — buttons bind, a CW press rotates
       via the live game, soft-drop repeats on the DAS/ARR schedule and
       stops on release, and disabled presses no-op.
-- [ ] Phase 15 — Particle effects / juice
+- [x] Phase 15 — Particle effects / juice (done this session). New
+      js/particles.js (browser-only, canvas-only, no library): a pooled,
+      bounded square-particle system — a fixed ring buffer of 240 slots,
+      oldest culled first, so the frame cost is capped no matter how fast
+      effects trigger. Physics is evaluated analytically from spawn time
+      (x0 + v*t, gravity 0.0009 px/ms²), so nothing integrates per frame and
+      a janky/backgrounded frame can't destabilize it. Effects, all layered
+      on top of Phase 11's shake + flash (which are unchanged):
+      line-clear bursts (2 squares per occupied cell in the row's own piece
+      colors, upward pop + gravity, ~0.5-0.8s fade), a bigger Tetris burst
+      (3/cell, faster, longer-lived ~0.7-1.1s, white sparkles mixed in),
+      and a hard-drop impact dust puff (~12 short-lived flecks) at the
+      landing cells, drawn INSIDE the shake transform so bursts move with
+      the field during the pulse.
+      Minimal model additions (data the model already computes at those
+      moments, in the existing payloads — no new event plumbing, model
+      stays pure): the lineClear event in game.js now carries `rows` +
+      `rowCells` (captured before the collapse, so particle colors are the
+      cleared cells' actual letters), and hardDrop() stores a
+      `hardDropLanding` snapshot (type/rotation/x/y) next to `hardDropAt`,
+      which render.js keys off exactly as before.
+      Test coverage: 3 new logic tests (lineClear rows/rowCells for a
+      single clear and a Tetris, hardDropLanding matches the locked cells)
+      + 2 pool smoke tests (bounded at MAX 240 with oldest-cull, expiry
+      within max life + draw() reclaim) — 59 passed / 0 failed total.
+      render.js/particles.js drawing itself has no test coverage (canvas).
+- [ ] Grade A closeout — every line of CLAUDE.md's Grade A bar re-checked
+      against the actual repo state before declaring the build done.
 
 ## Needs human visual check
+
+**Phase 15 (particles) needs a real browser check.** The pool math is
+smoke-tested in Node, but the look/feel is not. Open index.html
+(double-click, file://), start a game, and verify:
+
+- **Line clear**: clearing 1-3 lines bursts small colored squares from the
+  cleared row(s) — colors should match the pieces that were in those rows —
+  popping up and falling back with gravity, fading out over ~0.5-0.8s.
+- **Tetris (4 lines)**: noticeably bigger/longer/faster burst than a single
+  clear, with white sparkles mixed in. It should read as clearly more
+  exciting.
+- **Hard drop**: a small dust puff at the piece's landing cells alongside
+  the existing board shake; short-lived (~0.3s), subtle.
+- **Fresh board never spawns particles**: starting a game must not show any
+  burst (the hardDropAt/lastEvents reference guards), and particles never
+  appear outside the board canvas.
+- **Frame-rate sanity**: hold a fast game going (many hard drops + clears)
+  on a phone-class device if possible — it must stay smooth; the particle
+  count is hard-capped at 240 with oldest-first culling, so it cannot grow
+  unbounded.
 
 **Phase 14 (mobile + touch) needs a real device/dev-tools check.** The
 dispatch and repeat logic is smoke-tested in Node, but the layout and touch
