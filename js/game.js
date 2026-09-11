@@ -22,6 +22,14 @@
   const NEXT_QUEUE = 3; // how many upcoming pieces the preview shows
   const SPAWN_Y = 0; // pieces enter at the top of the hidden buffer
 
+   // Fire a gameplay event (move/rotate/lock/lineClear/...) to the optional
+   // listener the audio layer installs on the game object (game.onEvent). A
+   // no-op when nobody's listening — e.g. in Node tests — so the core logic
+   // is unaffected and the test surface stays green.
+  function emit(g, name) {
+    if (g.onEvent) g.onEvent(name);
+   }
+
   const Game = {
     LOCK_DELAY_MS: LOCK_DELAY_MS,
     MAX_LOCK_RESETS: MAX_LOCK_RESETS,
@@ -175,6 +183,7 @@
     }
     g.onGround = true;
     if (cells > 0) g.score += Scoring.hardDropScore(cells);
+    emit(g, 'harddrop');
     lockAndNext(g);
     return cells;
   }
@@ -215,6 +224,7 @@
   function lockAndNext(g) {
     const c = g.current;
     if (!c) return;
+    const prevLevel = g.level; // to detect a level-up below (Marathon)
     Board.lock(g.board, Piece.getCells(c.type, c.rotation, 0, 0), c.x, c.y, c.type);
     g.holdUsed = false; // holding is allowed again for the next piece
 
@@ -227,6 +237,9 @@
       g.level = g.config.levelForLines(g.linesCleared);
       if (g.config.rampsWithLevel) g.gravityMs = Scoring.gravityForLevel(g.level);
       g.lastEvents = { type: 'lineClear', lines: full.length, score: g.score };
+        // 4 lines is a Tetris (distinct, bigger sound); 1–3 is a line clear.
+      emit(g, full.length === 4 ? 'tetris' : 'lineclear');
+      if (g.level > prevLevel) emit(g, 'levelup');
       if (g.config.checkWin({ linesCleared: g.linesCleared })) {
         g.state = 'won';
         g.result = 'won';
@@ -234,6 +247,7 @@
       }
     } else {
       g.lastEvents = { type: 'lock' };
+      emit(g, 'lock');
     }
     spawnNext(g);
   }
@@ -273,11 +287,29 @@
 
   // Bind the public action surface onto the game object.
   function bind(g) {
-    g.move = function (dx) { return move(g, dx); };
-    g.rotate = function (dir) { return rotate(g, dir); };
-    g.softDrop = function () { return softDrop(g); };
+    g.move = function (dx) {
+      const ok = move(g, dx);
+      if (ok) emit(g, 'move');
+      return ok;
+     };
+    g.rotate = function (dir) {
+      const ok = rotate(g, dir);
+      if (ok) emit(g, 'rotate');
+      return ok;
+     };
+    g.softDrop = function () {
+      const ok = softDrop(g);
+      if (ok) emit(g, 'softdrop');
+      return ok;
+     };
+      // hardDrop emits its own 'harddrop' event inside; the lock/line-clear
+      // events come from lockAndNext below.
     g.hardDrop = function () { return hardDrop(g); };
-    g.hold = function () { return holdPiece(g); };
+    g.hold = function () {
+      const ok = holdPiece(g);
+      if (ok) emit(g, 'hold');
+      return ok;
+     };
     g.dropToFloor = function () { return dropToFloor(g); };
     g.tick = function (dt) { return tick(g, dt); };
     g.spawnNext = function () { return spawnNext(g); };

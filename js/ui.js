@@ -40,6 +40,10 @@
       this._loadSettings();
       this._bind();
       this._syncToggles();
+         // Push the persisted toggles into the audio layer now, so the first
+         // user gesture (which unlocks the AudioContext) honors what the user
+         // last chose — a persisted "music off" stays off.
+      this._applyAudio();
       this._selectDifficulty(this._diff);
       this._unlockAudio();
       this.goHome();
@@ -124,6 +128,8 @@
     startGame(mode, difficulty) {
       this.config = { mode: mode, difficulty: difficulty || 'normal' };
       this.game = T.Game.create({ mode: this.config.mode, difficulty: this.config.difficulty });
+         // Route this game's event stream to the SFX bus (move/rotate/lock/…).
+      if (T.Audio && T.Audio.install) T.Audio.install(this.game);
       this._showPage('game');
       this._hideOverlays();
       T.Input.bind(this.game);

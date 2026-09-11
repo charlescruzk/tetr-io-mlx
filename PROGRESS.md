@@ -5,23 +5,26 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 9 done (needs human visual check)
+## Status: Phase 10 done (needs human visual check)
 
 Phases 0–3 complete (Board, Piece, Randomizer). Phases 4a (core game loop),
-4b (SRS wall kicks), 5 (rendering), 6 (input), 7 (scoring), 8 (modes), and 9
-(UI screens) are implemented. 4a/4b/7/8 are verified (`node tests/run.js` →
-45 passed / 0 failed) and committed. Phases 5, 6, and 9 are browser-only
-modules: `node -c` clean + code read back, but they have NO test-runner
-coverage, so they need a human to open index.html and drive a real game (see
-"Needs human visual check" below). Next: Phase 10 (Audio).
+4b (SRS wall kicks), 5 (rendering), 6 (input), 7 (scoring), 8 (modes), 9
+(UI screens), and 10 (audio) are implemented. 4a/4b/7/8 are verified
+(`node tests/run.js` → 45 passed / 0 failed) and committed. Phases 5, 6, 9,
+and 10 are browser-only modules: `node -c` clean + code read back, but they
+have NO test-runner coverage, so they need a human to open index.html and
+drive a real game (see "Needs human visual check" below). Next: Phase 11
+(Visual polish).
 
 Note: the earlier session left Phase 3 (randomizer.js) and the Phase 7/8
 modules (scoring.js, modes.js) implemented but UNCOMMITTED. This session
 committed Phase 3 as a catch-up, then Phase 7 (scoring.js) and Phase 8
-(modes.js). Phase 9 built the six screens (index.html + style.css), the
-screen-manager (js/ui.js), and the frame-loop glue (js/main.js); audio.js is
-still a Phase 10 stub and its toggles are wired as safe no-ops until then.
-The full game-logic stack is committed and green.
+(modes.js), Phase 9 (index.html + style.css + ui.js + main.js), and Phase 10
+(js/audio.js + the guarded event wiring in js/game.js). audio.js is now a full
+Web Audio module — synthesized SFX + a looping music track, both gated by the
+Settings toggles and applied live; js/game.js fires gameplay events through an
+optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
+45/45 stays green. The full game-logic stack is committed and green.
 
 ## Phase checklist
 
@@ -53,7 +56,12 @@ The full game-logic stack is committed and green.
       js/ui.js screen manager + mode-appropriate HUD + localStorage settings;
       js/main.js rAF loop. Needs human visual check — no test-runner coverage
       for DOM/canvas/events)
-- [ ] Phase 10 — Audio
+- [x] Phase 10 — Audio (js/audio.js: Web Audio synthesized SFX — move/rotate/
+      soft-drop/hard-drop/lock/line-clear/Tetris/level-up/hold + menu/start/
+      pause/win/game-over — and a looping arpeggio music track, both gated by
+      the Settings toggles and applied live; js/game.js fires events through a
+      guarded onEvent hook audio.js installs. Needs human visual check — no
+      test-runner coverage for Web Audio).
 - [ ] Phase 11 — Visual polish pass
 - [ ] Phase 12 — Final pass
 
@@ -121,8 +129,27 @@ must open `index.html` (double-click, file://) and verify:
    Marathon shows Score/Lines/Level/Time; Sprint shows Lines as "n / 40" + Time.
 - **Game over fires correctly**: top-out → Game Over screen with final stats;
    a Sprint win at 40 lines → "40 Lines!" with the final time as the headline.
-- **Audio is silent until Phase 10**: the Music/SFX toggles are wired as safe
-   no-ops (audio.js is still a stub), so nothing should error in the console.
+- **Audio now works (Phase 10)**: SFX fire on their triggers and the music
+   loop plays; see the Phase 10 block below.
+
+Phase 10 (js/audio.js + js/game.js event hook) — audio is now live: the game
+makes sound. No test-runner coverage for Web Audio, so a human must open
+`index.html` (double-click, file://), click/press a key once to unlock the
+AudioContext (browsers require a user gesture), and verify:
+
+- **SFX fire on trigger**: moving / rotating / soft-dropping makes a blip;
+   hard-dropping thunks; locking ticks; clearing 1–3 lines plays a short
+   arpeggio; clearing 4 lines (a Tetris) plays a *bigger, longer* one; leveling
+   up (Marathon, every 10 lines) rises; holding swaps with a soft blip.
+- **Mute toggles actually silence**: turn SFX off in Settings — gameplay sounds
+   stop immediately; turn Music off — the loop stops. Flip them back on and
+   they return. Toggling applies live, no reload needed.
+- **Persistence + gesture unlock**: reload the page with a toggle off — it stays
+   off (localStorage `tetrio-settings`) and nothing plays until the first
+   click/keypress (the AudioContext unlocks on that gesture, not on load, so
+   there is no autoplay error in the console).
+- **No console errors**: no Web Audio exceptions; the AudioContext is created on
+   the first gesture and the music loop starts cleanly on the music bus.
 
 ## Blocked
 
