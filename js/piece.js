@@ -45,6 +45,33 @@
       SHAPES[type] = states;
       }
 
+      // SRS wall-kick offset tables. States are 0=spawn,1=R,2=180,3=L. Each
+      // entry is up to 5 [dx, dy] offsets tried in order when a naive rotation
+      // (offset [0,0]) collides. The convention is the standard SRS reference
+      // where +y is UP; game.js negates dy when applying, because this board's
+      // y grows downward. JLSTZ share one table; the I piece uses its own. The
+      // O piece never rotates, so callers skip it.
+    const KICKS_JLSTZ = {
+      '0->1': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+      '1->0': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+      '1->2': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+      '2->1': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+      '2->3': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+      '3->2': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+      '3->0': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+      '0->3': [[0, 0], [1, 0], [1, 1], [0, -2], [1, 2]],
+       };
+    const KICKS_I = {
+      '0->1': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+      '1->0': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+      '1->2': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
+      '2->1': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+      '2->3': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+      '3->2': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+      '3->0': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+      '0->3': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
+       };
+
     const Piece = {
       TYPES: TYPES,
 
@@ -55,6 +82,18 @@
         // getCells(type, rotation, x, y)
         //   type: one of Piece.TYPES. rotation: 0-3. x, y: board offset.
         //   Returns 4 [x, y] absolute board cells for that piece+rotation+pos.
+      getKicks(type, from, to) {
+        // SRS wall-kick offsets, tried in order when the naive rotation collides.
+        // Offsets are [dx, dy] in the standard +y-up convention; callers on a
+        // y-down board negate dy. JLSTZ share a table; I has its own; O never
+        // rotates (empty). Falls back to the naive [0,0] if a key is missing.
+        if (type === 'O') return [];
+        const table = type === 'I' ? KICKS_I : KICKS_JLSTZ;
+        const key = (((from % 4) + 4) % 4) + '->' + (((to % 4) + 4) % 4);
+        const kicks = table[key];
+        return kicks ? kicks : [[0, 0]];
+      },
+
       getCells(type, rotation, x, y) {
         const states = SHAPES[type];
         if (!states) throw new Error('unknown piece type: ' + type);

@@ -124,21 +124,30 @@
     return false;
   }
 
-  // Rotate the active piece (dir +1 = CW, -1 = CCW). Phase 4a: naive
-  // rotation — the target state is tried at the piece's own position
-  // (offset 0,0), with no wall-kick table. Phase 4b replaces this body
-  // with an SRS kick search over Piece.getKicks(...). The O piece has
-  // no rotation. Returns true if it rotated.
+  // Rotate the active piece (dir +1 = CW, -1 = CCW). Phase 4b: SRS wall
+  // kicks — the target state is tried at the naive offset [0,0] first, then
+  // each kick from Piece.getKicks(type, from, to) in order until one lands
+  // without colliding. Kicks are in +y-up SRS convention, so dy is negated on
+  // this y-down board. The O piece never rotates. Returns true if it rotated.
   function rotate(g, dir) {
     if (g.state !== 'playing' || !g.current || g.current.type === 'O') return false;
     const from = g.current.rotation;
     const to = ((from + dir) % 4 + 4) % 4;
-    if (!collidesAt(g, to, g.current.x, g.current.y)) {
-      g.current.rotation = to;
-      g.onGround = !canDrop(g);
-      if (g.onGround) noteGroundMove(g);
-      return true;
-    }
+         // SRS wall kicks: naive offset [0,0] first, then each kick in order.
+         // Offsets are [dx, dy] with +y up, so negate dy on this y-down board.
+    const kicks = Piece.getKicks(g.current.type, from, to);
+    for (let k = 0; k < kicks.length; k++) {
+      const nx = g.current.x + kicks[k][0];
+      const ny = g.current.y - kicks[k][1];
+      if (!collidesAt(g, to, nx, ny)) {
+        g.current.rotation = to;
+        g.current.x = nx;
+        g.current.y = ny;
+        g.onGround = !canDrop(g);
+        if (g.onGround) noteGroundMove(g);
+        return true;
+     }
+       }
     return false;
   }
 

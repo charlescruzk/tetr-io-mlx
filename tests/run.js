@@ -172,10 +172,114 @@ test('each piece has a distinct shape (no two types share the same spawn)', () =
   assertEqual(new Set(sig).size, 7, 'all 7 pieces should have distinct spawn shapes');
 });
 
-// TODO(qwen, Phase 4b): SRS wall kick tests, e.g. a T piece rotating
-// against a wall should succeed via a kick where naive rotation would
-// collide. Add them here once Piece.getKicks is implemented (or note in
-// PROGRESS.md if the CLAUDE.md fallback was used instead).
+// ---------------------------------------------------------------- Phase 4b
+// SRS wall kicks (js/piece.js getKicks + game.js rotate()). The reference
+// test below is the regression guard for the copy-paste bug that had the
+// wrong 2->3 / 3->2 / 3->0 JLSTZ entries; the functional tests drive the
+// real kick search through game.js.rotate().
+
+test('Piece.getKicks returns the canonical SRS tables (JLSTZ and I)', () => {
+  // Typed independently of the source tables so a copy-paste error in the
+  // source is caught here, not masked by matching the same wrong values.
+  const REF_JLSTZ = {
+    '0->1': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+    '1->0': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+    '1->2': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+    '2->1': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+    '2->3': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+    '3->2': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+    '3->0': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+    '0->3': [[0, 0], [1, 0], [1, 1], [0, -2], [1, 2]],
+    };
+  const REF_I = {
+    '0->1': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+    '1->0': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+    '1->2': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
+    '2->1': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+    '2->3': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+    '3->2': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+    '3->0': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+    '0->3': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
+    };
+  const pairs = ['0->1', '1->0', '1->2', '2->1', '2->3', '3->2', '3->0', '0->3'];
+  for (const t of ['J', 'L', 'S', 'T', 'Z']) {
+    for (const key of pairs) {
+      const [f, to] = key.split('->').map(Number);
+      assertEqual(
+        JSON.stringify(Piece.getKicks(t, f, to)),
+        JSON.stringify(REF_JLSTZ[key]),
+        `JLSTZ ${t} ${key} should match the canonical table`
+        );
+    }
+  }
+  for (const key of pairs) {
+    const [f, to] = key.split('->').map(Number);
+    assertEqual(
+      JSON.stringify(Piece.getKicks('I', f, to)),
+      JSON.stringify(REF_I[key]),
+      `I ${key} should match the canonical table`
+      );
+  }
+});
+
+test('Piece.getKicks returns an empty list for the O piece', () => {
+  assertEqual(Piece.getKicks('O', 0, 1).length, 0, 'the O piece never rotates, so it has no kicks');
+});
+
+test('SRS kick: a vertical I at the right wall kicks left when rotating (naive fails)', () => {
+  const g = Game.create();
+   // Vertical I (state R) in the rightmost column: the naive 180 rotation
+   // would place a cell off the right wall, but the 1->2 kick (-1,0) lands it.
+  g.current = { type: 'I', rotation: 1, x: 7, y: 0 };
+  g.lockResets = 0;
+  assert(Game._internals.collidesAt(g, 2, 7, 0), 'the naive horizontal rotation should collide with the right wall');
+  const ok = g.rotate(1);
+  assert(ok, 'rotation should succeed via a wall kick');
+  assertEqual(g.current.rotation, 2, 'rotation advanced to 180');
+  assertEqual(g.current.x, 6, 'the 1->2 kick (-1,0) moves the piece one column left');
+  assertEqual(g.current.y, 0, 'a horizontal kick leaves y unchanged');
+});
+
+test('SRS kick: a JLSTZ piece kicks up off the floor where naive rotation falls through', () => {
+  const g = Game.create();
+  const floor = Board.HEIGHT + Board.BUFFER - 1; // last valid row, y=23
+   // T resting one row above the floor; the naive CCW (0->3) sends the nub
+   // below the floor, but the 0->3 kick (1,1 -> +x, -y on this board) lifts it.
+  g.current = { type: 'T', rotation: 0, x: 3, y: floor - 1 };
+  g.lockResets = 0;
+  assert(Game._internals.collidesAt(g, 3, 3, floor - 1), 'the naive CCW rotation should collide with the floor');
+  const ok = g.rotate(-1);
+  assert(ok, 'rotation should succeed via a wall kick');
+  assertEqual(g.current.rotation, 3, 'rotation advanced to L (state 3)');
+  assert(!Game._internals.collidesAt(g, 3, g.current.x, g.current.y), 'the kicked position must not collide');
+});
+
+test('rotation fails and the piece is unchanged when every kick collides', () => {
+  const g = Game.create();
+     // Fill the whole field, then carve out exactly the current piece's
+     // footprint: it fits its current orientation, but every rotated position
+     // overlaps a filled cell, so no kick can land. This proves the "fails
+     // cleanly" contract without hand-tracing which corner traps all 5 kicks.
+  for (let y = 0; y < g.board.length; y++) {
+    for (let x = 0; x < Board.WIDTH; x++) g.board[y][x] = 'X';
+     }
+  g.current = { type: 'T', rotation: 0, x: 3, y: 20 };
+  g.lockResets = 0;
+  for (const [cx, cy] of Piece.getCells('T', 0, 3, 20)) g.board[cy][cx] = null;
+  assert(!Game._internals.collidesAt(g, 0, 3, 20), 'the piece fits its current orientation');
+  const ok = g.rotate(1);
+  assert(!ok, 'rotation should fail when every kick collides');
+  assertEqual(g.current.rotation, 0, 'rotation state is unchanged after a failed rotation');
+  assertEqual(g.current.x, 3, 'x is unchanged after a failed rotation');
+  assertEqual(g.current.y, 20, 'y is unchanged after a failed rotation');
+});
+
+test('the O piece never rotates even when rotation is requested', () => {
+  const g = Game.create();
+  g.current = { type: 'O', rotation: 0, x: 3, y: 0 };
+  assert(!g.rotate(1), 'the O piece should report no rotation');
+  assertEqual(g.current.rotation, 0, 'O rotation state stays 0');
+});
 
 // ---------------------------------------------------------------- Phase 3
 // Randomizer
