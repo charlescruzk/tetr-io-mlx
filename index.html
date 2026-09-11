@@ -8,39 +8,127 @@
 </head>
 <body>
 
-  <!-- Screen: Home (see SPEC.md screen 1, PLAN.md Phase 9) -->
+  <!-- Screen: Home (SPEC.md screen 1, PLAN.md Phase 9) -->
   <div id="screen-home" class="screen">
-    <!-- TODO(qwen, Phase 9): title/logo, Play button, Settings button, version/credits line -->
-  </div>
-
-  <!-- Screen: Mode Select (see SPEC.md screen 2) -->
-  <div id="screen-mode-select" class="screen hidden">
-    <!-- TODO(qwen, Phase 9): Classic / Marathon / 40 Line Sprint cards, difficulty selector, Back -->
-  </div>
-
-  <!-- Screen: In-game (see SPEC.md screen 3) -->
-  <div id="screen-game" class="screen hidden">
-    <canvas id="board-canvas"></canvas>
-    <canvas id="hold-canvas"></canvas>
-    <canvas id="next-canvas"></canvas>
-    <div id="hud">
-      <!-- TODO(qwen, Phase 9): score/lines/level/time, appropriate per mode -->
+    <div class="screen-inner home-inner">
+      <h1 class="logo">TETRIS<span class="logo-sub">IO · MLX</span></h1>
+      <div class="menu-buttons">
+        <button id="btn-play" class="btn btn-primary">Play</button>
+        <button id="btn-settings-home" class="btn">Settings</button>
+      </div>
+      <p class="credits">v0.1 · vanilla JS + Canvas · no build step · double-click to play</p>
     </div>
   </div>
 
-  <!-- Screen: Pause overlay (see SPEC.md screen 4) -->
-  <div id="screen-pause" class="screen hidden">
-    <!-- TODO(qwen, Phase 9): Resume, Restart, Settings, Quit to Main Menu -->
+  <!-- Screen: Mode Select (SPEC.md screen 2) -->
+  <div id="screen-mode-select" class="screen hidden">
+    <div class="screen-inner">
+      <h2 class="screen-title">Select Mode</h2>
+
+      <div class="difficulty-selector">
+        <span class="selector-label">Difficulty</span>
+        <div class="seg" id="difficulty-seg" role="group" aria-label="Difficulty">
+          <button class="seg-btn" data-difficulty="easy">Easy</button>
+          <button class="seg-btn active" data-difficulty="normal">Normal</button>
+          <button class="seg-btn" data-difficulty="hard">Hard</button>
+        </div>
+      </div>
+
+      <div class="mode-cards">
+        <button class="mode-card" data-mode="classic">
+          <span class="mode-name">Classic</span>
+          <span class="mode-desc">Endless play, fixed gravity. Clear as many lines as you can.</span>
+        </button>
+        <button class="mode-card" data-mode="marathon">
+          <span class="mode-name">Marathon</span>
+          <span class="mode-desc">Endless. Gravity speeds up every 10 lines — go the distance.</span>
+        </button>
+        <button class="mode-card" data-mode="sprint">
+          <span class="mode-name">40 Line Sprint</span>
+          <span class="mode-desc">Race to clear 40 lines as fast as possible. Your time is the score.</span>
+        </button>
+      </div>
+
+      <button id="btn-back-home" class="btn btn-ghost">Back</button>
+    </div>
   </div>
 
-  <!-- Screen: Settings (see SPEC.md screen 5) -->
-  <div id="screen-settings" class="screen hidden">
-    <!-- TODO(qwen, Phase 9): Music on/off, SFX on/off, Back (context-aware: Home or Pause) -->
+  <!-- Screen: In-game (SPEC.md screen 3) -->
+  <div id="screen-game" class="screen hidden">
+    <div class="game-layout">
+      <div class="panel side-hold">
+        <div class="panel-label">Hold</div>
+        <canvas id="hold-canvas"></canvas>
+      </div>
+      <div class="board-wrap">
+        <canvas id="board-canvas"></canvas>
+      </div>
+      <div class="panel side-next">
+        <div class="panel-label">Next</div>
+        <canvas id="next-canvas"></canvas>
+        <div id="hud" class="hud">
+          <div class="stat" id="stat-score">
+            <span class="stat-label">Score</span>
+            <span class="stat-value" id="val-score">0</span>
+          </div>
+          <div class="stat" id="stat-lines">
+            <span class="stat-label">Lines</span>
+            <span class="stat-value" id="val-lines">0</span>
+          </div>
+          <div class="stat" id="stat-level">
+            <span class="stat-label">Level</span>
+            <span class="stat-value" id="val-level">1</span>
+          </div>
+          <div class="stat" id="stat-time">
+            <span class="stat-label">Time</span>
+            <span class="stat-value" id="val-time">0:00</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- Screen: Game Over / results (see SPEC.md screen 6) -->
-  <div id="screen-gameover" class="screen hidden">
-    <!-- TODO(qwen, Phase 9): final stats, Retry, Main Menu -->
+  <!-- Screen: Pause overlay (SPEC.md screen 4) -->
+  <div id="screen-pause" class="screen overlay hidden">
+    <div class="screen-inner overlay-inner">
+      <h2 class="screen-title">Paused</h2>
+      <div class="menu-buttons">
+        <button id="btn-resume" class="btn btn-primary">Resume</button>
+        <button id="btn-restart-pause" class="btn">Restart</button>
+        <button id="btn-settings-pause" class="btn">Settings</button>
+        <button id="btn-quit-pause" class="btn btn-ghost">Quit to Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Screen: Settings (SPEC.md screen 5, reachable from Home and Pause) -->
+  <div id="screen-settings" class="screen overlay hidden">
+    <div class="screen-inner overlay-inner">
+      <h2 class="screen-title">Settings</h2>
+      <div class="settings-list">
+        <div class="setting-row">
+          <span class="setting-label">Music</span>
+          <button class="toggle on" id="toggle-music" role="switch" aria-checked="true">On</button>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">SFX</span>
+          <button class="toggle on" id="toggle-sfx" role="switch" aria-checked="true">On</button>
+        </div>
+      </div>
+      <button id="btn-settings-back" class="btn btn-primary">Back</button>
+    </div>
+  </div>
+
+  <!-- Screen: Game Over / results (SPEC.md screen 6) -->
+  <div id="screen-gameover" class="screen overlay hidden">
+    <div class="screen-inner overlay-inner">
+      <h2 class="screen-title" id="gameover-title">Game Over</h2>
+      <div class="stats" id="gameover-stats"></div>
+      <div class="menu-buttons">
+        <button id="btn-retry" class="btn btn-primary">Retry</button>
+        <button id="btn-menu" class="btn btn-ghost">Main Menu</button>
+      </div>
+    </div>
   </div>
 
   <!--
@@ -48,8 +136,8 @@
     game runs from file:// with no server. Pure-logic files (board/piece/
     randomizer/scoring/modes) attach to window.Tetris.*; game/render/input/
     audio/ui/main are browser-only and depend on the pure-logic files being
-    loaded first. Don't reorder without checking PLAN.md for what depends
-    on what.
+    loaded first. Don't reorder without checking PLAN.md for what depends on
+    what.
   -->
   <script src="js/board.js"></script>
   <script src="js/piece.js"></script>

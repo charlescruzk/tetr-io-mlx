@@ -43,19 +43,369 @@ body {
   overflow: hidden;
 }
 
+/* ---- Screen framework (Phase 9) ----
+   Pages (home / mode-select / game / gameover) cross-fade in and out.
+   Overlays (pause / settings / gameover) sit on top of the page beneath
+   them on a dimmed backdrop. `.hidden` fades out rather than snapping to
+   display:none so transitions stay smooth (SPEC "no jarring instant swaps").
+   Phase 11 may refine the transition timing and add entrance scale. */
+
 .screen {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--bg);
+  opacity: 1;
   transition: opacity var(--transition-med);
+  z-index: 1;
 }
 
+.overlay {
+  background: rgba(10, 11, 20, 0.86);
+  z-index: 5;
+}
+
+/* Hidden pages/overlays fade out and drop out of the interaction stack.
+   The visibility flips *after* the opacity fade (delayed by the transition
+   duration) so the fade-out is actually seen instead of snapping to nothing.
+   On show, the base .screen transition fades opacity in with visibility
+   restoring immediately. */
 .hidden {
-  display: none;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--transition-med), visibility 0s linear var(--transition-med);
 }
 
-/* TODO(qwen, Phase 9 & 11): per-screen layout, HUD, buttons, canvas
-   sizing/positioning, line-clear/hard-drop animation, screen transitions.
-   Keep using the CSS variables above rather than hardcoding new colors. */
+.screen-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 32px;
+  max-width: 720px;
+  width: 100%;
+  text-align: center;
+}
+
+.home-inner { gap: 40px; }
+
+.overlay-inner {
+  background: var(--surface);
+  border: 1px solid rgba(124, 92, 255, 0.35);
+  border-radius: 16px;
+  padding: 40px 48px;
+  box-shadow: 0 0 40px rgba(124, 92, 255, 0.18);
+}
+
+/* ---- Home ---- */
+.logo {
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  line-height: 1;
+  color: var(--text);
+  text-shadow: 0 0 24px rgba(51, 224, 255, 0.35);
+}
+
+.logo-sub {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 8px;
+  margin-top: 10px;
+  color: var(--accent-2);
+  text-shadow: none;
+}
+
+.credits {
+  font-size: 13px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+/* ---- Titles ---- */
+.screen-title {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--text);
+}
+
+/* ---- Buttons (neon) ---- */
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 260px;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid rgba(124, 92, 255, 0.4);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast),
+             background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 16px rgba(124, 92, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn:active { transform: translateY(0); }
+
+.btn-primary {
+  background: linear-gradient(180deg, var(--accent), #5f3fe0);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--text-dim);
+}
+
+/* ---- Mode select ---- */
+.difficulty-selector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.selector-label {
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.seg {
+  display: flex;
+  border: 1px solid rgba(124, 92, 255, 0.3);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.seg-btn {
+  appearance: none;
+  background: var(--surface);
+  border: none;
+  color: var(--text-dim);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 10px 22px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.seg-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.mode-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  width: 100%;
+}
+
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid rgba(124, 92, 255, 0.25);
+  border-radius: 14px;
+  padding: 20px;
+  cursor: pointer;
+  color: var(--text);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast),
+             border-color var(--transition-fast);
+}
+
+.mode-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent-2);
+  box-shadow: 0 0 24px rgba(51, 224, 255, 0.25);
+}
+
+.mode-name {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.mode-desc {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+/* ---- In-game layout (tetr.io style: hold | board | next+HUD) ---- */
+.game-layout {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 20px;
+  padding: 20px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-label {
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.side-hold canvas,
+.side-next canvas {
+  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.board-wrap canvas {
+  background: var(--surface);
+  border: 1px solid rgba(124, 92, 255, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 0 32px rgba(124, 92, 255, 0.18);
+}
+
+.hud {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 14px;
+  min-width: 96px;
+}
+
+.stat-label {
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* hide a HUD stat for modes that don't use it */
+.stat.is-hidden { display: none; }
+
+/* ---- Settings ---- */
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--surface-raised);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+.setting-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.toggle {
+  appearance: none;
+  min-width: 84px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(124, 92, 255, 0.35);
+}
+
+/* ---- Game over stats ---- */
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  font-size: 16px;
+}
+
+.stat-row .k { color: var(--text-dim); letter-spacing: 1px; }
+.stat-row .v {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.stat-row.headline .v {
+  font-size: 26px;
+  color: var(--accent-2);
+}
+
+/* ---- Responsive: stack the in-game panels on narrow screens ---- */
+@media (max-width: 640px) {
+  .mode-cards { grid-template-columns: 1fr; }
+  .game-layout { flex-wrap: wrap; justify-content: center; }
+  .logo { font-size: 44px; }
+}

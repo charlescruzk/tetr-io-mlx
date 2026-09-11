@@ -5,22 +5,23 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 8 done
+## Status: Phase 9 done (needs human visual check)
 
 Phases 0–3 complete (Board, Piece, Randomizer). Phases 4a (core game loop),
-4b (SRS wall kicks), 5 (rendering), 6 (input), 7 (scoring), and 8 (modes) are
-implemented. 4a/4b/7/8 are verified (`node tests/run.js` → 45 passed / 0
-failed) and committed. Phases 5 and 6 are browser-only modules: `node -c`
-clean + code read back, but they have NO test-runner coverage, so they need a
-human to open index.html and drive a real game (see "Needs human visual check"
-below). Next: Phase 9 (UI screens).
+4b (SRS wall kicks), 5 (rendering), 6 (input), 7 (scoring), 8 (modes), and 9
+(UI screens) are implemented. 4a/4b/7/8 are verified (`node tests/run.js` →
+45 passed / 0 failed) and committed. Phases 5, 6, and 9 are browser-only
+modules: `node -c` clean + code read back, but they have NO test-runner
+coverage, so they need a human to open index.html and drive a real game (see
+"Needs human visual check" below). Next: Phase 10 (Audio).
 
 Note: the earlier session left Phase 3 (randomizer.js) and the Phase 7/8
 modules (scoring.js, modes.js) implemented but UNCOMMITTED. This session
 committed Phase 3 as a catch-up, then Phase 7 (scoring.js) and Phase 8
-(modes.js), each now that its tests exist. The full game-logic stack
-(board/piece/randomizer/scoring/modes + game loop) is now committed and
-green.
+(modes.js). Phase 9 built the six screens (index.html + style.css), the
+screen-manager (js/ui.js), and the frame-loop glue (js/main.js); audio.js is
+still a Phase 10 stub and its toggles are wired as safe no-ops until then.
+The full game-logic stack is committed and green.
 
 ## Phase checklist
 
@@ -48,7 +49,10 @@ green.
       lines, Marathon levels every 10 lines, distinct starting gravities
       per difficulty, ramp flags, endless-no-target, unknown mode/difficulty
       throws). Verified 45/45.
-- [ ] Phase 9 — UI screens
+- [x] Phase 9 — UI screens (index.html six screens + style.css neon layout;
+      js/ui.js screen manager + mode-appropriate HUD + localStorage settings;
+      js/main.js rAF loop. Needs human visual check — no test-runner coverage
+      for DOM/canvas/events)
 - [ ] Phase 10 — Audio
 - [ ] Phase 11 — Visual polish pass
 - [ ] Phase 12 — Final pass
@@ -98,6 +102,27 @@ then verify:
    scroll — game keys `preventDefault()`, everything else does.
 - The held-key auto-repeat loop stops cleanly on `unbind()` / when disabled
   (Phase 9 gates it on the active screen).
+
+Phase 9 (index.html + style.css + ui.js + main.js) — now that main.js runs the
+frame loop and ui.js wires the screens, the whole game is playable end-to-end
+from `index.html`. No test-runner coverage for DOM/canvas/events, so a human
+must open `index.html` (double-click, file://) and verify:
+
+- **Navigation**: Home → Play → Mode Select → (pick a difficulty, click a mode
+   card) → board. Back returns Home. Pause (Esc/P) → Resume / Restart /
+   Settings / Quit. Settings "Back" returns to *where it was opened from*
+    (Pause stays underneath when opened from Pause). Game Over → Retry / Main
+   Menu. No dead buttons; no jarring instant swaps (screens cross-fade).
+- **Pause actually halts**: while the Pause overlay is up, gravity, the lock
+   timer, and the clock all freeze (the loop only ticks when state==='playing').
+- **Settings persist**: toggle Music/SFX, reload the page — the toggles keep
+   their state (localStorage key `tetrio-settings`). Toggling applies live.
+- **HUD is mode-appropriate**: Classic shows Score/Lines/Time (no Level);
+   Marathon shows Score/Lines/Level/Time; Sprint shows Lines as "n / 40" + Time.
+- **Game over fires correctly**: top-out → Game Over screen with final stats;
+   a Sprint win at 40 lines → "40 Lines!" with the final time as the headline.
+- **Audio is silent until Phase 10**: the Music/SFX toggles are wired as safe
+   no-ops (audio.js is still a stub), so nothing should error in the console.
 
 ## Blocked
 
