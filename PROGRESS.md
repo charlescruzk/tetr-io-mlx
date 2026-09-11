@@ -5,16 +5,19 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 10 done (needs human visual check)
+## Status: Phase 11 done (needs human visual check)
 
 Phases 0–3 complete (Board, Piece, Randomizer). Phases 4a (core game loop),
 4b (SRS wall kicks), 5 (rendering), 6 (input), 7 (scoring), 8 (modes), 9
-(UI screens), and 10 (audio) are implemented. 4a/4b/7/8 are verified
-(`node tests/run.js` → 45 passed / 0 failed) and committed. Phases 5, 6, 9,
-and 10 are browser-only modules: `node -c` clean + code read back, but they
-have NO test-runner coverage, so they need a human to open index.html and
-drive a real game (see "Needs human visual check" below). Next: Phase 11
-(Visual polish).
+(UI screens), 10 (audio), and 11 (visual polish) are implemented. 4a/4b/7/8
+are verified (`node tests/run.js` → 45 passed / 0 failed) and committed.
+Phases 5, 6, 9, 10, and 11 are browser-only modules: `node -c` clean + code
+read back, but they have NO test-runner coverage, so they need a human to open
+index.html and drive a real game (see "Needs human visual check" below).
+Phase 11 added render-side juice (hard-drop board pulse, line-clear flash) and
+CSS polish (monospace HUD numbers, a subtle scale-in on screen change, a
+reduced-motion fallback); the model stays pure — game.js only bumps a
+`hardDropAt` counter the renderer keys off. Next: Phase 12 (Final pass).
 
 Note: the earlier session left Phase 3 (randomizer.js) and the Phase 7/8
 modules (scoring.js, modes.js) implemented but UNCOMMITTED. This session
@@ -62,7 +65,15 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       the Settings toggles and applied live; js/game.js fires events through a
       guarded onEvent hook audio.js installs. Needs human visual check — no
       test-runner coverage for Web Audio).
-- [ ] Phase 11 — Visual polish pass
+- [x] Phase 11 — Visual polish pass. Render-side juice in js/render.js
+      (a hard-drop briefly shakes the board via ctx.translate; a line clear
+      flashes a fading white wash over the field — both keyed off model signals
+      `g.hardDropAt` and `g.lastEvents`, so the model stays pure). CSS polish
+      in style.css: a monospace/tabular font stack for the HUD + game-over
+      numbers (`--font-mono`), a subtle scale-in on every screen change
+      (`.screen-inner`), and a `prefers-reduced-motion` fallback that keeps the
+      cross-fade but drops the scale. Needs human visual check — no
+      test-runner coverage for canvas/CSS animation.
 - [ ] Phase 12 — Final pass
 
 ## Needs human visual check
@@ -150,6 +161,27 @@ AudioContext (browsers require a user gesture), and verify:
    there is no autoplay error in the console).
 - **No console errors**: no Web Audio exceptions; the AudioContext is created on
    the first gesture and the music loop starts cleanly on the music bus.
+
+Phase 11 (js/render.js + style.css) — visual polish, no test-runner coverage for
+canvas animation or CSS transitions, so a human must open `index.html` (double-
+click, file://) and confirm the juice reads well and nothing janks:
+
+- **Hard-drop pulse**: hard-dropping (Space) briefly shakes the whole field —
+   a small vertical translate on the board canvas that decays over ~130ms. The
+   shake only fires on a real hard drop (keyed off `g.hardDropAt`), not on the
+   first frame of a fresh board (the `!= null` guard).
+- **Line-clear flash**: clearing 1–4 lines paints a white wash over the field
+   that fades out over ~160ms (keyed off `g.lastEvents.type === 'lineClear'`).
+   It should fire exactly once per clear and not linger.
+- **HUD legibility**: the Score/Lines/Level/Time numbers and the game-over stat
+   values now render in a monospace/tabular font, so digits don't jitter as they
+   change. Confirm they still read cleanly at the default size.
+- **Screen entrance**: navigating between screens (Home → Mode Select → Game,
+   back/quit, pause, game over) plays a subtle scale-in on the screen's inner
+   content alongside the opacity cross-fade. On a system with
+   "reduce motion" on, the scale is dropped but the cross-fade remains.
+- No `NaN`/`undefined` in the FX math (a fresh board must not pulse or flash);
+   the flash/pulse alpha strings are always valid `rgba(...,0.0–0.25)`.
 
 ## Blocked
 

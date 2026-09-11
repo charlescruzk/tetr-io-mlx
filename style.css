@@ -4,25 +4,30 @@
    top starts from the same tokens. */
 
 :root {
-  --bg: #0e0f1a;
-  --surface: #171826;
-  --surface-raised: #1f2136;
-  --accent: #7c5cff;
-  --accent-2: #33e0ff;
-  --text: #e8e8f0;
-  --text-dim: #9090a8;
-  --danger: #ff4d6d;
+     --bg: #0e0f1a;
+     --surface: #171826;
+     --surface-raised: #1f2136;
+     --accent: #7c5cff;
+     --accent-2: #33e0ff;
+     --text: #e8e8f0;
+     --text-dim: #9090a8;
+     --danger: #ff4d6d;
 
-  --piece-i: #33e0ff;
-  --piece-o: #ffd93d;
-  --piece-t: #b57cff;
-  --piece-s: #3ddc84;
-  --piece-z: #ff5a5a;
-  --piece-j: #4d7bff;
-  --piece-l: #ff9f43;
+     --piece-i: #33e0ff;
+     --piece-o: #ffd93d;
+     --piece-t: #b57cff;
+     --piece-s: #3ddc84;
+     --piece-z: #ff5a5a;
+     --piece-j: #4d7bff;
+     --piece-l: #ff9f43;
 
-  --transition-fast: 150ms ease;
-  --transition-med: 250ms ease;
+     --transition-fast: 150ms ease;
+     --transition-med: 250ms ease;
+
+     /* Legible digits for the HUD + game-over readouts (SPEC: monospace numbers).
+      The body stays a geometric sans; only the numeric readouts use this. */
+     --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'SF Mono',
+                Menlo, Consolas, monospace;
 }
 
 * {
@@ -89,6 +94,31 @@ body {
   max-width: 720px;
   width: 100%;
   text-align: center;
+}
+
+/* Phase 11: a subtle scale-in on every screen change. The hidden variant holds
+   a tiny shrink; when .hidden is dropped the inner eases back to full size along
+   the opacity cross-fade, so screens arrive with a gentle zoom instead of a hard
+   swap. Reduced-motion users get the cross-fade only, no scale. */
+.screen-inner {
+  transform: scale(1);
+  transition: transform var(--transition-med), opacity var(--transition-med);
+}
+
+.hidden .screen-inner {
+  transform: scale(0.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen,
+  .screen-inner,
+  .hidden {
+    transition: opacity var(--transition-med);
+  }
+  .screen-inner,
+  .hidden .screen-inner {
+    transform: none;
+  }
 }
 
 .home-inner { gap: 40px; }
@@ -321,6 +351,7 @@ body {
 }
 
 .stat-value {
+  font-family: var(--font-mono);
   font-size: 22px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -394,6 +425,7 @@ body {
 
 .stat-row .k { color: var(--text-dim); letter-spacing: 1px; }
 .stat-row .v {
+  font-family: var(--font-mono);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--text);

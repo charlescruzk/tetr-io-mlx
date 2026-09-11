@@ -184,6 +184,7 @@
     g.onGround = true;
     if (cells > 0) g.score += Scoring.hardDropScore(cells);
     emit(g, 'harddrop');
+    g.hardDropAt = (g.hardDropAt || 0) + 1; // render.js pulses the board on this
     lockAndNext(g);
     return cells;
   }

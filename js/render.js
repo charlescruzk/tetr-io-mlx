@@ -41,6 +41,14 @@
     COLORS: COLORS,
     _ready: false,
     _ctx: {},
+     // Pure render-side juice (Phase 11): a hard-drop pulses the board, a line
+     // clear flashes it. Timed in ms; the model already collapsed the rows.
+    _lastHardDrop: 0,
+    _lastEvents: null,
+    _flashUntil: 0,
+    _flashMs: 160,
+    _pulseUntil: 0,
+    _pulseMs: 130,
 
     // Grab the three canvases and size their back-buffers. Idempotent, and
     // safe to call every frame: it no-ops once ready and backs off (returns
@@ -68,19 +76,54 @@
       this.setup();
       if (!this._ready) return;
       const c = this._ctx;
+       // now drives the FX timers; falls back to 0 off-canvas so a test never
+       // sees a NaN. performance.now() is what the rAF loop in main.js uses.
+      const now = (typeof performance !== 'undefined' ? performance.now() : 0);
+      this._updateFx(g, now);
       this._clear(c.board, W, H);
+       // A hard-drop briefly shakes the whole field (translate, then restore).
+      c.board.save();
+      if (now < this._pulseUntil) {
+        const t = (this._pulseUntil - now) / this._pulseMs;
+        c.board.translate(0, Math.sin(now / 8) * 3 * t);
+        }
       this._drawBoard(c.board, g.board);
       if (g.current) {
         this._drawGhost(c.board, g.current, g.ghostY());
         this._drawActive(c.board, g.current);
-      }
+       }
+      c.board.restore();
+       // A line clear flashes a white wash over the field, fading out.
+      if (now < this._flashUntil) {
+        const t = (this._flashUntil - now) / this._flashMs;
+        c.board.fillStyle = 'rgba(255,255,255,' + (0.25 * t) + ')';
+        c.board.fillRect(0, 0, W * CELL, H * CELL);
+        }
       this._clear(c.hold, 4, 4);
       this._drawHold(c.hold, g.holdType, g.holdUsed);
       this._clear(c.next, 4, 12);
       this._drawNext(c.next, g.nextQueue);
-    },
+     },
 
     // ---- internals (operate on a canvas 2D context) ----
+
+     // Advance the render-only FX timers. A hard-drop bumps g.hardDropAt; a line
+     // clear replaces g.lastEvents with a fresh {type:'lineClear'} object. We key
+     // off those changes so the model stays pure — it never writes render state.
+     // The first frame sees hardDropAt as undefined (guard with != null) so a
+     // fresh board doesn't pulse on its own.
+     _updateFx(g, now) {
+      if (g.hardDropAt != null && g.hardDropAt !== this._lastHardDrop) {
+        this._lastHardDrop = g.hardDropAt;
+        this._pulseUntil = now + this._pulseMs;
+         }
+      if (g.lastEvents !== this._lastEvents) {
+        this._lastEvents = g.lastEvents;
+        if (g.lastEvents && g.lastEvents.type === 'lineClear') {
+          this._flashUntil = now + this._flashMs;
+          }
+        }
+     },
 
     _clear(ctx, cols, rows) {
       ctx.clearRect(0, 0, cols * CELL, rows * CELL);
