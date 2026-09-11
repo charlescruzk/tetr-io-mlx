@@ -18,8 +18,8 @@ const Randomizer = require(path.join(__dirname, '..', 'js', 'randomizer.js'));
 const Game = require(path.join(__dirname, '..', 'js', 'game.js'));
 // Phase 7: scoring + gravity curve.
 const Scoring = require(path.join(__dirname, '..', 'js', 'scoring.js'));
-// TODO(qwen, Phase 8): uncomment once js/modes.js is implemented.
-// const Modes = require(path.join(__dirname, '..', 'js', 'modes.js'));
+// Phase 8: game modes.
+const Modes = require(path.join(__dirname, '..', 'js', 'modes.js'));
 
 let pass = 0;
 let fail = 0;
@@ -44,6 +44,16 @@ function assertEqual(actual, expected, msg) {
   if (actual !== expected) {
     throw new Error(msg || `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
   }
+}
+
+function assertThrows(fn, msg) {
+  let threw = false;
+  try {
+    fn();
+   } catch (e) {
+    threw = true;
+    }
+  if (!threw) throw new Error(msg || 'expected the function to throw');
 }
 
 // ---------------------------------------------------------------- Phase 1
@@ -476,10 +486,62 @@ test('gravityForLevel is monotonically non-increasing and floors at 50ms', () =>
 });
 
 // ---------------------------------------------------------------- Phase 8
-// Modes — TODO(qwen): add tests once js/modes.js is implemented and the
-// require at the top of this file is uncommented. Cover: Sprint reports
-// "won" exactly at 40 lines, Marathon levels up every 10 lines, each
-// difficulty maps to a distinct starting gravity.
+// Modes — mode configs + difficulty presets (js/modes.js).
+
+test('Sprint reports "won" exactly at 40 lines, not before or after', () => {
+  const sprint = Modes.getConfig('sprint', 'normal');
+  assert(sprint.targetLines === 40, 'Sprint targets 40 lines');
+  assert(!sprint.checkWin({ linesCleared: 39 }), '39 lines should not win');
+  assert(sprint.checkWin({ linesCleared: 40 }), '40 lines should win');
+  assert(sprint.checkWin({ linesCleared: 45 }), 'stays won past 40');
+  assert(sprint.checkResult({ linesCleared: 40 }) === 'won', 'checkResult is won at 40');
+});
+
+test('Marathon levels up every 10 lines; Classic/Sprint hold their start level', () => {
+  const marathon = Modes.getConfig('marathon', 'normal'); // startLevel 5
+  assert(marathon.rampsWithLevel, 'Marathon ramps with level');
+  assertEqual(marathon.levelForLines(0), 5, 'level 5 at 0 lines');
+  assertEqual(marathon.levelForLines(9), 5, 'still level 5 at 9 lines');
+  assertEqual(marathon.levelForLines(10), 6, 'level 6 at 10 lines');
+  assertEqual(marathon.levelForLines(37), 8, 'level 8 at 37 lines');
+  assertEqual(marathon.levelForLines(40), 9, 'level 9 at 40 lines');
+  const classic = Modes.getConfig('classic', 'normal');
+  assert(!classic.rampsWithLevel, 'Classic does not ramp');
+  assertEqual(classic.levelForLines(40), 5, 'Classic holds its start level');
+  const sprint = Modes.getConfig('sprint', 'normal');
+  assertEqual(sprint.levelForLines(40), 5, 'Sprint holds its start level');
+});
+
+test('each difficulty maps to a distinct starting gravity', () => {
+  const easy = Modes.getConfig('classic', 'easy'); // startLevel 1
+  const normal = Modes.getConfig('classic', 'normal'); // startLevel 5
+  const hard = Modes.getConfig('classic', 'hard'); // startLevel 9
+  assert(easy.startLevel === 1, 'Easy starts at level 1');
+  assert(normal.startLevel === 5, 'Normal starts at level 5');
+  assert(hard.startLevel === 9, 'Hard starts at level 9');
+  const gravities = [easy.startGravity, normal.startGravity, hard.startGravity];
+  assert(new Set(gravities).size === 3, 'all three starting gravities must be distinct');
+  // faster gravity = smaller ms, so higher level is strictly faster.
+  assert(easy.startGravity > normal.startGravity, 'Easy must be slower than Normal');
+  assert(normal.startGravity > hard.startGravity, 'Normal must be slower than Hard');
+});
+
+test('Sprint gravity does not ramp but Marathon does', () => {
+  assert(!Modes.getConfig('sprint', 'normal').rampsWithLevel, 'Sprint gravity is fixed');
+  assert(Modes.getConfig('marathon', 'normal').rampsWithLevel, 'Marathon gravity ramps');
+});
+
+test('classic and marathon are endless (no win target)', () => {
+  assert(Modes.getConfig('classic', 'normal').checkWin({ linesCleared: 999 }) === false,
+     'Classic has no win target');
+  assert(Modes.getConfig('marathon', 'normal').checkWin({ linesCleared: 999 }) === false,
+     'Marathon has no win target');
+});
+
+test('getConfig throws on an unknown mode or difficulty', () => {
+  assertThrows(() => Modes.getConfig('freestyle', 'normal'), 'unknown mode');
+  assertThrows(() => Modes.getConfig('classic', 'medium'), 'unknown difficulty');
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

@@ -5,19 +5,22 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 7 done
+## Status: Phase 8 done
 
 Phases 0–3 complete (Board, Piece, Randomizer). Phases 4a (core game loop),
-4b (SRS wall kicks), 5 (rendering), 6 (input), and 7 (scoring) are implemented.
-4a/4b/7 are verified (`node tests/run.js` → 39 passed / 0 failed) and committed.
-Phases 5 and 6 are browser-only modules: `node -c` clean + code read back, but
-they have NO test-runner coverage, so they need a human to open index.html and
-drive a real game (see "Needs human visual check" below). Next: Phase 8 (Modes).
+4b (SRS wall kicks), 5 (rendering), 6 (input), 7 (scoring), and 8 (modes) are
+implemented. 4a/4b/7/8 are verified (`node tests/run.js` → 45 passed / 0
+failed) and committed. Phases 5 and 6 are browser-only modules: `node -c`
+clean + code read back, but they have NO test-runner coverage, so they need a
+human to open index.html and drive a real game (see "Needs human visual check"
+below). Next: Phase 9 (UI screens).
 
 Note: the earlier session left Phase 3 (randomizer.js) and the Phase 7/8
 modules (scoring.js, modes.js) implemented but UNCOMMITTED. This session
-committed Phase 3 as a catch-up, then Phase 7 (js/scoring.js, now that its
-tests exist). js/modes.js stays uncommitted until its Phase 8 tests are added.
+committed Phase 3 as a catch-up, then Phase 7 (scoring.js) and Phase 8
+(modes.js), each now that its tests exist. The full game-logic stack
+(board/piece/randomizer/scoring/modes + game loop) is now committed and
+green.
 
 ## Phase checklist
 
@@ -41,7 +44,10 @@ tests exist). js/modes.js stays uncommitted until its Phase 8 tests are added.
       values at level 1, level scaling, level clamp-to-1, zero/unknown counts,
       soft/hard drop pts/cell, gravity monotonic-non-increasing + 50ms floor).
       Verified 39/39.
-- [ ] Phase 8 — Modes (js/modes.js written; tests pending)
+- [x] Phase 8 — Modes (js/modes.js + 6 tests: Sprint wins at exactly 40
+      lines, Marathon levels every 10 lines, distinct starting gravities
+      per difficulty, ramp flags, endless-no-target, unknown mode/difficulty
+      throws). Verified 45/45.
 - [ ] Phase 9 — UI screens
 - [ ] Phase 10 — Audio
 - [ ] Phase 11 — Visual polish pass
@@ -125,14 +131,17 @@ pass. It flapped again during Phase 4b but recovered; nothing is blocked.)
   across phases, so each phase's own module file is committed in its own
   commit while run.js/PROGRESS.md ride along in the most-recent phase's
   commit — keeps "one commit per phase" for the module artifacts.
-- js/scoring.js (Phase 7 module) is done: 7 tests in tests/run.js (line
-  values, level scaling, clamp-to-1, zero/unknown counts, soft/hard pts,
-  gravity monotonic + floor) and the Scoring require is uncommented —
-  verified 39/39, committed with Phase 7. js/modes.js (Phase 8 module)
-  still has a TODO test section and a commented require — that completes
-  in Phase 8.
-- 7 tests (in tests/run.js): line-clear points at level 1 (100/300/500/800),
-  level scaling (×5 at level 5), level clamped to min 1 (level 0 / -3 = ×1),
-  zero/unknown line counts score nothing, soft 1pt/cell + hard 2pts/cell,
-  gravity 1000ms at level 1 and decreasing, and gravity monotonically
-  non-increasing with a 50ms floor at very high levels.
+- js/scoring.js (Phase 7) and js/modes.js (Phase 8) are both done: their
+  requires in tests/run.js are uncommented and both have real test sections
+  (not just imported). The full game-logic stack is green.
+- 7 scoring tests (in tests/run.js): line-clear points at level 1
+  (100/300/500/800), level scaling (×5 at level 5), level clamped to min 1
+  (level 0 / -3 = ×1), zero/unknown line counts score nothing, soft 1pt/cell
+  + hard 2pts/cell, gravity 1000ms at level 1 and decreasing, and gravity
+  monotonically non-increasing with a 50ms floor at very high levels.
+- 6 modes tests (in tests/run.js): Sprint wins at exactly 40 lines (not at 39,
+  still won past 40), Marathon levels up every 10 lines while Classic/Sprint
+  hold their start level, each difficulty (Easy L1 / Normal L5 / Hard L9) maps
+  to a distinct and strictly-decreasing starting gravity, Sprint doesn't ramp
+  but Marathon does, Classic/Marathon are endless (no win target), and
+  getConfig throws on an unknown mode or difficulty.
