@@ -5,12 +5,14 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 4b done (32/32 tests pass)
+## Status: Phase 5 done (needs human visual check)
 
-Phases 0–3 complete (Board, Piece, Randomizer). Phase 4a (core game loop)
-and Phase 4b (SRS wall kicks) are implemented, verified
-(`node tests/run.js` → 32 passed / 0 failed), and committed. Next:
-Phase 5 (Rendering).
+Phases 0–3 complete (Board, Piece, Randomizer). Phases 4a (core game loop),
+4b (SRS wall kicks), and 5 (rendering) are implemented. 4a/4b are verified
+(`node tests/run.js` → 32 passed / 0 failed) and committed. Phase 5 (render.js)
+is a browser-only canvas module: `node -c` clean + code read back, but it has
+NO test-runner coverage, so it needs a human to open index.html and eyeball it
+(see "Needs human visual check" below). Next: Phase 6 (Input).
 
 Note: the earlier session left Phase 3 (randomizer.js) and the Phase 7/8
 modules (scoring.js, modes.js) implemented but UNCOMMITTED. This session
@@ -31,7 +33,8 @@ Phase 7/8 modules stay uncommitted until their tests are added (Phases 7/8).
 - [x] Phase 4b — SRS wall kicks (js/piece.js getKicks + js/game.js rotate();
       6 new tests: canonical-table regression guard, I right-wall kick, JLSTZ
       floor kick, all-kicks-fail, O never rotates). Verified 32/32.
-- [ ] Phase 5 — Rendering
+- [x] Phase 5 — Rendering (js/render.js: board + active + ghost + next×3 + hold;
+      needs human visual check — no test-runner coverage for canvas/DOM)
 - [ ] Phase 6 — Input
 - [ ] Phase 7 — Scoring + gravity curve (js/scoring.js written; tests pending)
 - [ ] Phase 8 — Modes (js/modes.js written; tests pending)
@@ -42,7 +45,27 @@ Phase 7/8 modules stay uncommitted until their tests are added (Phases 7/8).
 
 ## Needs human visual check
 
-(nothing yet — phases 5, 6, 9, 10, 11 will add specific notes here)
+Phase 5 (render.js) — no test-runner coverage possible (canvas/DOM). `node -c`
+is clean and the code was read back, but a human must open `index.html` and
+drive a real frame. Note: the requestAnimationFrame loop + screen wiring that
+would make the canvases actually paint come in Phase 9, so for now the check
+is a *unit* check — call `Tetris.Render.frame(Tetris.Game.create())` from the
+console once the DOM is up, and verify:
+
+- **Board canvas** (`board-canvas`, 300×600): faint grid on an empty field;
+  locked cells fill in the correct guideline color (I cyan, O yellow, T purple,
+  S green, Z red, J blue, L orange — matching the `--piece-*` CSS tokens).
+- **Active piece** falls into view and is drawn at full opacity with a beveled edge.
+- **Ghost** is the same piece dimmed (~30% alpha) exactly at its landing row
+  (it tracks the active piece — when you move/rotate the active piece the ghost
+  follows). Cells in the hidden 4-row spawn buffer are not drawn.
+- **Next queue** (`next-canvas`, 120×360): 3 pieces, top = next to spawn,
+  each centered in its own 4×4 slot, further-out ones slightly dimmer.
+- **Hold box** (`hold-canvas`, 120×120): the held piece centered; it dims to
+  ~35% while this piece's hold is spent and returns to full after the next lock.
+- No `NaN`/`undefined` cell coordinates (would show as a black or misplaced
+  block). Watch the very first piece — it spawns in the buffer and should only
+  become visible as it falls past row 0.
 
 ## Blocked
 
