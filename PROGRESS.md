@@ -5,7 +5,14 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 11 done (needs human visual check)
+## Status: Phase 12 done — build complete (final pass)
+
+All 13 phases (0–12, 4a/4b counted separately) are implemented and committed,
+one commit each. Logic is verified by the test runner (45 passed / 0 failed).
+The browser-only phases (5, 6, 9, 10, 11) have no test-runner coverage and are
+flagged "needs human visual check" below — that is the only open gate on the
+build; everything is either checked off or truthfully flagged, nothing silently
+missing.
 
 Phases 0–3 complete (Board, Piece, Randomizer). Phases 4a (core game loop),
 4b (SRS wall kicks), 5 (rendering), 6 (input), 7 (scoring), 8 (modes), 9
@@ -17,7 +24,10 @@ index.html and drive a real game (see "Needs human visual check" below).
 Phase 11 added render-side juice (hard-drop board pulse, line-clear flash) and
 CSS polish (monospace HUD numbers, a subtle scale-in on screen change, a
 reduced-motion fallback); the model stays pure — game.js only bumps a
-`hardDropAt` counter the renderer keys off. Next: Phase 12 (Final pass).
+`hardDropAt` counter the renderer keys off. Phase 12 (the final pass) is a
+verification-only closeout: a clean 45/45 run, a `js/` scan for `TODO(qwen…)`
+markers (none remain), a one-commit-per-phase history (0–11), and a
+`PROGRESS.md` account of every phase — nothing silently missing.
 
 Note: the earlier session left Phase 3 (randomizer.js) and the Phase 7/8
 modules (scoring.js, modes.js) implemented but UNCOMMITTED. This session
@@ -74,7 +84,14 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       (`.screen-inner`), and a `prefers-reduced-motion` fallback that keeps the
       cross-fade but drops the scale. Needs human visual check — no
       test-runner coverage for canvas/CSS animation.
-- [ ] Phase 12 — Final pass
+- [x] Phase 12 — Final pass. Verification-only closeout: full test run
+      (`node tests/run.js` → 45 passed / 0 failed, covering Board, Piece,
+      Randomizer, Scoring, Modes, and Game), a `js/` scan for `TODO(qwen…)`
+      markers (none), a one-commit-per-phase history (Phases 0–11), all six
+      screens present in index.html, and every phase above accounted for
+      (done or truthfully flagged "needs human visual check"). README.md's
+      how-to-run was checked and is unchanged (still "open index.html"), so it
+      was not edited.
 
 ## Needs human visual check
 
@@ -185,9 +202,13 @@ click, file://) and confirm the juice reads well and nothing janks:
 
 ## Blocked
 
-(resolved 2026-09-10: the Bash safety-classifier outage that held up Phase
-4a's verification + commit is cleared — `node tests/run.js` runs again, 26/26
-pass. It flapped again during Phase 4b but recovered; nothing is blocked.)
+Nothing is blocked. The only recurring issue this build was the Bash
+safety-classifier outage (`qwen3.8:27b-mlx is temporarily unavailable (timed
+out)`), first seen during Phase 4a's verification + commit. It flapped
+repeatedly (Phases 4b, 9, 10, and heavily during Phase 11/12), but every
+time it recovered on retry, so it never held up a commit. Read-only tools
+(Read/grep via the Edit tool) were unaffected, so CSS/JS edits could proceed
+in the gaps. No feature was skipped or stubbed for it.
 
 ## Notes
 
