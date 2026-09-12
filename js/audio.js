@@ -42,9 +42,9 @@
   };
 
   const LOOKAHEAD_S = 0.20;  // schedule this far ahead
-  const MUSIC_BASE_GAIN = 0.10;
-  const MENU_GAIN = 0.045;
-  const MENU_FILTER_HZ = 520;
+  const MUSIC_BASE_GAIN = 0.075; // lower than before so the melody is supportive, not loud
+  const MENU_GAIN = 0.035;
+  const MENU_FILTER_HZ = 480;
   const GAME_FILTER_HZ = 9000;
 
   // ---- SFX catalog (SPEC.md "SFX needed") ----

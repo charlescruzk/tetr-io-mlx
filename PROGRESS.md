@@ -317,18 +317,23 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       the Phase 17 markup, passes now).
 - [x] Phase 19 — Music: sequencer on the AudioContext clock + composed
       ≥16-bar multi-voice track. New js/music.js (dual-export, pure): a 16-bar
-      original loop with lead/bass/pad/kick/snare/hat voices, tempo-for-level
-      (+2 BPM/level, cap 176), sidechain duck envelope, and stinger data for
-      Tetris/level-up/game-over. js/audio.js rebuilt: master compressor, music
-      bus (static gain -> lowpass -> duck gain), per-voice synthesis,
-      lookahead scheduling via Music.schedule on ctx.currentTime, level-reactive
-      BPM + intensity layer, 150ms duck on line clears/Tetris, stingers on big
-      events, and a softer filtered/lower-gain menu variant when not playing.
-      The old setInterval arpeggio is removed. Tests: 7 music tests covering
-      pattern consistency, note validity, tempo monotonicity/cap, duck envelope,
-      scheduler coverage, loop boundary, jittered 60s playback, and stinger data.
-      `node tests/run.js` 70/70; `node -c` clean on all js/. Static check done.
-      **Needs human audio check** (see below).
+      arrangement of the public-domain "Korobeiniki" (classic Tetris A theme) in
+      A minor, with a clear singable lead melody, simple root+fifth bassline,
+      soft whole-bar pad chords, and minimal low-velocity drums so the tune stays
+      supportive rather than distracting. Tempo-for-level (+2 BPM/level, cap
+      176), sidechain duck envelope, and stinger data for Tetris/level-up/
+      game-over. js/audio.js rebuilt: master compressor, music bus (static gain
+      -> lowpass -> duck gain), per-voice synthesis, lookahead scheduling via
+      Music.schedule on ctx.currentTime, level-reactive BPM, 150ms duck on line
+      clears/Tetris, stingers on big events, and a softer filtered/lower-gain
+      menu variant when not playing. Music base gain reduced to 0.075 so it sits
+      behind gameplay rather than on top of it. The old setInterval arpeggio is
+      removed. Tests: 7 music tests covering pattern consistency, note validity,
+      tempo monotonicity/cap, duck envelope, scheduler coverage, loop boundary,
+      jittered 60s playback, and stinger data. `node tests/run.js` 85/85;
+      `node -c` clean on all js/. Static check done. **Needs human audio check**
+      (see below): melody should now be clearly recognizable and not feel like
+      noise.
 - [x] Phase 20 — Animated background. New js/backgroundsim.js (dual-export,
       pure): 18 drifting tetromino silhouettes on a unit torus, palette shifts
       for dark/clear/tetris states, per-shape and global event pulses with
@@ -531,13 +536,18 @@ browser pass.** Open `index.html` by double-click (file://) and verify:
 browser/audio pass for what Node cannot judge.** Open `index.html` by double-
 click (file://), click or press a key once to unlock the AudioContext, and
 listen for:
+- **Recognizable tune**: the lead now plays the public-domain "Korobeiniki"
+  (classic Tetris A theme) in A minor — a clear, singable melody, not random
+  arpeggios.
+- **Non-distracting mix**: drums are minimal, pad is soft, bass is simple, and
+  overall music level is reduced so gameplay sounds and the melody don't fight.
 - **Distinct voices**: lead (square melody), bass (triangle low end), pad
-  (detuned saws), kick/snare/hat percussion — not a single four-note arpeggio.
+  (detuned saws), kick/snare/hat percussion.
 - **Seamless loop**: the 16-bar theme repeats without a click or pause at the
   bar boundary.
 - **Tempo rising in Marathon**: start a Marathon game; the music should speed
-  up slightly as the level increases (Easy level 1 is base 128 BPM; level 10 is
-  ~146 BPM).
+  up slightly as the level increases (Easy level 1 is base 126 BPM; level 10 is
+  ~144 BPM).
 - **Duck on line clear**: clearing lines produces a short dip in the music
   volume (~150ms), then it swells back.
 - **Stingers**: a Tetris (4-line clear) plays a brighter celebratory phrase on
