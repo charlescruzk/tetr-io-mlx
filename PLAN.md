@@ -377,3 +377,108 @@ via real `TouchEvent`s.
   768×1024, 844×390, 667×375, 568×320, 1024×768; desktop unchanged;
   `node tests/run.js` green including the structure guards.
 - Commit: "Phase 18: rebuild mobile layout (portrait + landscape), DPR-crisp canvases"
+
+## Phases 19–23 — Presentation upgrade (SPEC.md "Presentation upgrade")
+
+Read that SPEC.md section first; it carries the two rules every phase
+here must obey (model stays pure; everything degrades gracefully) and the
+frame budget. The verification standard is the one Phase 18 set:
+**measure in a real browser** when a browser tool is available. When it is
+not, the fallback is stricter than before — every phase here must have
+Node-testable pure parts (dual-export, like board/piece/etc.) so the
+sequence data, timing math, pool bounds, and animation timelines are
+proven by `node tests/run.js`, and only the final look is left to a flag.
+
+## Phase 19 — Music: a real sequencer and a composed track
+
+Replace the `setInterval` arpeggio in `js/audio.js` with:
+
+- `js/music.js` (dual-export, pure): the song data (per-voice patterns
+  over ≥16 bars, note = {t, dur, midi|freq, vel}), tempo-for-level
+  function, and a scheduler that, given `(now, lastScheduledUntil,
+  lookahead)`, returns the notes to schedule and the new cursor — pure
+  functions of time, no Web Audio inside, so they are unit-testable.
+- The Web Audio side in `audio.js`: voices per SPEC (lead, bass, pad,
+  percussion), master compressor, lookahead loop on `ctx.currentTime`,
+  level-reactive tempo/layers, line-clear duck, stingers, softer menu
+  variant. Existing SFX and toggles keep working.
+
+Tests (`tests/run.js`): every note in every pattern is in range and within
+its bar; pattern lengths are consistent across voices; tempo-for-level is
+monotonic and capped; the scheduler never schedules a note twice and never
+falls behind (simulate 60s of ticks with jitter); the duck envelope
+returns to unity. Static-check `audio.js`, then a flag: what to listen for
+(distinct voices, loop seamless at the bar boundary, tempo rising in
+Marathon, duck on clear, stingers, menu variant, toggles live).
+
+- **DoD**: tests green; no `setInterval` timebase left; flag written.
+- Commit: "Phase 19: music sequencer + composed track"
+
+## Phase 20 — Animated background
+
+`js/background.js` (browser-only) + a pure `js/backgroundsim.js`
+(dual-export): the simulation of drifting silhouettes (positions,
+rotations, velocities, wrap-around, pulse decay) with no canvas inside,
+so it's testable; the drawing side renders to a low-res offscreen canvas
+and upscales. Hooked from `main.js`'s frame loop; reacts to `lastEvents`
+and `level`; pauses on `visibilitychange`; static gradient under reduced
+motion. CSS: background canvas fixed behind everything; screen
+backgrounds become translucent panels so it shows through without hurting
+board contrast.
+
+Tests: silhouettes stay inside the wrap bounds after N steps; pulse decays
+to 0; step cost — simulate 1000 steps in Node and assert it's well under a
+budget (this is a smoke bound, not a benchmark, but it catches
+accidental O(n²)); reduced-motion mode produces no motion (positions
+unchanged across steps).
+
+- **DoD**: tests green; static check; flag (subtle, never competes with
+  the board; pulses on clears; freezes when the tab is hidden).
+- Commit: "Phase 20: animated background"
+
+## Phase 21 — Board and piece rendering upgrade
+
+In `js/render.js` (+ a pure `js/fxtimeline.js`, dual-export, for the
+timelines): cell sprite sheet (pre-rendered glossy cells per color, active
+vs locked variants, drawn once per DPR change), glowing-outline ghost,
+lock flash, the render-side line-clear animation (snapshot → flash →
+dissolve → slide, ~220ms, driven by a pure timeline function of elapsed
+time), hard-drop trail, floating popups (pooled), vignette + danger tint.
+Particles get a couple of new spawners (lock sparkle, level-up ring).
+
+Tests: timeline functions are pure and bounded (at t=0 initial state, at
+t≥duration final state, monotonic slide offset); popup pool bounded;
+snapshot/live switch-over happens exactly at the timeline end; the model
+signals consumed are the existing ones (a grep-style test that `game.js`
+gained no new presentation fields beyond what SPEC allows).
+
+- **DoD**: tests green; static check; flag naming every effect and its
+  trigger; frame cost sanity (`Render.frame` under a synthetic worst case —
+  a Tetris + hard drop + popups — measured with `performance.now()` in the
+  browser when available, else reasoned in the flag).
+- Commit: "Phase 21: board and piece rendering upgrade"
+
+## Phase 22 — Screens and UI polish
+
+CSS-led (with tiny JS for count-ups and the HUD tick): title shimmer,
+button/card micro-interactions and focus rings, mode-card icons, pause
+backdrop blur with fallback, game-over count-up, HUD score tick and
+level-up flash. All under reduced-motion guards.
+
+- **DoD**: static check; every screen re-checked at the Phase 18 sizes
+  (no overflow/overlap regressions — the mobile layout is not to be
+  disturbed); flag written.
+- Commit: "Phase 22: screens and UI polish"
+
+## Phase 23 — A+ pass
+
+Run everything: `node tests/run.js` green; `node -c` on all `js/`; grep
+for stray `TODO`/`console.log`; confirm `index.html` still opens from
+`file://` with zero console errors (favicon 404 excepted); confirm the
+reduced-motion path and the hidden-tab pause; confirm music/SFX toggles;
+confirm the mobile layout still measures exactly as Phase 18 recorded;
+update `PROGRESS.md` so every phase 19–23 is done or truthfully flagged.
+Then re-verify CLAUDE.md's Grade A bar AND the A+ addendum line by line.
+
+- **DoD**: all of the above literally true.
+- Commit: "Phase 23: A+ pass"

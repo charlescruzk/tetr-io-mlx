@@ -1,10 +1,11 @@
 # Tetris-IO-MLX — Build Instructions (read this first)
 
-This project is being built autonomously by the local model driving this
-session (qwen3.8:27b-mlx via Claude Code). Follow `local-model-efficiency`
-discipline: small verifiable phases, explicit decomposition, verify with the
-checker not the vibe, flag and move on rather than grinding on one hard
-feature.
+This project is built autonomously by whichever model is driving this
+Claude Code session (it has been qwen3.8:27b-mlx, glm-5.3-flash, and
+kimi-k2.7 so far; the project owner's coordinator session steps in for
+verification and occasional phases). Regardless of model: small verifiable
+phases, explicit decomposition, verify with the checker not the vibe, flag
+and move on rather than grinding on one hard feature.
 
 ## Read in this order, every session
 
@@ -102,3 +103,25 @@ If any line is false, the build is not done — go fix that line, don't move
 on. If a line is false because of an allowed fallback (wall kicks,
 T-spin), that's fine — it just needs to be truthfully flagged, not silently
 false.
+
+## Grade A+ addendum (Phases 19+) — presentation work is held to this too
+
+Everything in the Grade A bar, plus, checked literally against the repo:
+
+- [ ] Every presentation module has a dual-export pure core with real tests
+      (sequence data, timelines, sims, pools) — "it's visual" is not an
+      excuse for zero test coverage of the parts that aren't.
+- [ ] `game.js` gained no presentation state (diff it: only allowed
+      additions are single fields on existing events, each with a test).
+- [ ] Every ambient/animated effect has a `prefers-reduced-motion` path and
+      pauses when the tab is hidden; the game is fully playable with both.
+- [ ] Zero console errors or warnings on a fresh `file://` open through a
+      full game (favicon 404 excepted).
+- [ ] No `setInterval` used as an audio timebase; music runs on the
+      `AudioContext` clock with lookahead.
+- [ ] The Phase 18 mobile measurements still hold (nothing in the
+      presentation layer may disturb the layout or push it over budget).
+- [ ] No stray `console.log`, no dead code, no half-finished effect left
+      "for later" without a PROGRESS.md flag.
+- [ ] Music and SFX toggles still apply live; AudioContext still unlocks on
+      the first gesture; the game is fully playable with sound off.

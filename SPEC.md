@@ -177,6 +177,110 @@ the build: file:// only, no external assets).
   already uses (`g.hardDropAt`, `g.lastEvents`) rather than adding new event
   plumbing to `game.js`.
 
+## Presentation upgrade — "it feels dry" (in scope — PLAN.md Phases 19–23)
+
+The game is mechanically complete and verified. What it lacks is
+*presentation*: the music is a four-note arpeggio, the cells are flat, the
+background is a flat color, and effects fire only on line clears and hard
+drops. This section defines the bar for a modern, polished feel. Same hard
+constraints as everything else: no build step, no CDN, no external files
+(audio included) — everything below is synthesized or drawn at runtime, and
+`index.html` must still work from `file://`.
+
+Two rules apply to every item here:
+
+1. **The model stays pure.** `game.js` gains no presentation state. Every
+   effect keys off signals the model already emits (`g.lastEvents`,
+   `g.hardDropAt`, `g.hardDropLanding`, `g.level`, `g.state`) or off a
+   render-side snapshot taken when those signals change. If a new signal is
+   genuinely needed it is one field on an existing event, added with a test.
+2. **Everything degrades gracefully.** `prefers-reduced-motion: reduce`
+   turns every ambient/animated effect into a static equivalent (background
+   becomes a still gradient, line-clear animation becomes the existing
+   instant flash, popups fade without motion). A hidden tab pauses all
+   ambient animation. Nothing here may cost frame rate on a phone: the
+   budget is the whole presentation layer (background + particles + board
+   effects) under ~3ms per frame on a mid-range phone, which in practice
+   means: bounded pools, no per-frame allocation in hot paths, low-res
+   offscreen canvases for blurred/ambient layers.
+
+### Music (Phase 19)
+
+- A real **sequencer** on the `AudioContext` clock: lookahead scheduling
+  (schedule notes ~100ms ahead from a short `setInterval`/rAF tick using
+  `ctx.currentTime`), never `setInterval` as the timebase — that drifts and
+  stutters when the tab is busy.
+- **Multi-voice composition**, at least: a lead (square/pulse with a short
+  envelope), a bass (triangle/saw with a low-pass), a pad or chord layer
+  (detuned saws through a filter, soft attack), and percussion (kick from a
+  pitched sine drop, snare/hat from filtered noise). A composed loop of at
+  least 16 bars, not a 4-note cycle. The melody may be an original
+  composition or a public-domain folk tune (the traditional Russian folk
+  melody "Korobeiniki" is public domain and the obvious choice — it is the
+  *game* name that is trademarked, not the folk song); either way the
+  sequence data lives in a dual-export module so it can be unit-tested.
+- **Reactive**: tempo follows the level in Marathon (e.g. +2 BPM per level,
+  capped), the mix gains an extra layer (hat/arp) at higher levels or when
+  the stack is high, a short **duck** (sidechain dip, ~150ms) on every line
+  clear, and a distinct stinger on Tetris, level-up, and game over. The
+  menu plays a softer/filtered variant of the same theme, so the theme is
+  continuous across screens rather than restarting on every transition.
+- Master bus with a gentle compressor/limiter so stacked SFX + music never
+  clip. Music/SFX toggles keep working live; the AudioContext still unlocks
+  on the first gesture.
+
+### Animated background (Phase 20)
+
+- A canvas layer behind every screen (`z-index` below the screens, screens'
+  backgrounds made translucent), drawn by a `js/background.js` module:
+  a slow, dark aurora/gradient drift plus sparse translucent tetromino
+  silhouettes drifting and slowly rotating, with soft glow. Subtle — it
+  must never compete with the board (keep overall luminance low; the board
+  and HUD sit on darker panels).
+- Reacts gently to play: a color pulse on line clear, a stronger one on
+  Tetris, the drift speed tied lightly to level.
+- Rendered to a **low-resolution offscreen canvas** (e.g. 1/4 scale) and
+  drawn up-scaled, so the blur/glow cost stays tiny; DPR-aware like the
+  other canvases; paused on `visibilitychange`; static gradient under
+  reduced motion.
+
+### Board and piece rendering (Phase 21)
+
+- **Cells**: a modern glossy look — per-color outer glow (`shadowBlur` is
+  expensive; pre-render each cell style once to an offscreen sprite sheet
+  and blit), an inner highlight/bevel, subtle 1px inner border; the active
+  piece glows more than locked cells; locked cells dim slightly with age
+  or depth is optional but stack readability must not drop.
+- **Ghost**: a glowing outline (stroke) in the piece color rather than a
+  dim fill, so it never reads as a placed piece.
+- **Lock**: a brief white flash on the locked cells (~120ms).
+- **Line clear animation** (render-side, model still collapses instantly):
+  on a `lineClear` event the renderer snapshots the pre-clear rows, then
+  over ~220ms plays: cleared rows flash white → dissolve into the existing
+  particle burst → the rows above slide down to their new position. The
+  board is drawn from the snapshot during the animation and from the live
+  model after. Input is not blocked (the model already moved on).
+- **Hard drop**: a short vertical trail behind the piece (fading copies
+  along its path) plus the existing shake and dust.
+- **Popups**: floating text in the board (`+800`, `TETRIS!`, `LEVEL 6`,
+  Sprint `40 LINES!`) rising and fading over ~700ms; pooled like particles.
+- **Board frame**: subtle inner vignette and a top "danger" tint when the
+  stack reaches the top ~4 rows.
+
+### Screens and UI polish (Phase 22)
+
+- Title screen: the logo gets a slow shimmer/glow sweep and a faint
+  scanline or grid texture behind it (CSS only); the background layer shows
+  through.
+- Buttons/cards: hover and press micro-animations (translate/scale ~1–2px,
+  glow on focus), consistent focus-visible ring for keyboard users.
+- Mode cards: a small canvas or CSS icon per mode (Classic: a static
+  stack; Marathon: an upward arrow/level curve; Sprint: a stopwatch).
+- Pause: the board behind blurs/dims (`backdrop-filter`, with a solid
+  fallback), stats on Game Over count up over ~600ms.
+- HUD: score changes tick up (tabular numbers, ~250ms), level-up flashes
+  the level tile.
+
 ## Explicitly out of scope for this build
 
 - T-spin detection/scoring, back-to-back bonus, combo bonus

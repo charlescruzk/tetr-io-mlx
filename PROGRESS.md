@@ -5,9 +5,23 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 18 DONE (2026-09-11) — mobile layout rebuilt and browser-verified in both orientations
+## Status: Phases 19–23 (presentation upgrade) scaffolded 2026-09-12 — start at Phase 19
 
-Phase 17's mobile layout did not work on the owner's phone, and it was
+The game is mechanically complete and browser-verified through Phase 18.
+The owner's verdict: it plays right but "feels really dry" — four-note
+arpeggio music, flat cells, flat background, effects only on clears and
+drops. SPEC.md's new "Presentation upgrade" section defines the bar
+(music sequencer + composed track, animated background, board/piece
+rendering upgrade, screens polish, A+ pass) and the two rules every
+phase must obey: the model stays pure, and everything degrades
+gracefully (reduced motion, hidden tab, phone frame budget). PLAN.md
+Phases 19–23 have the per-phase DoDs; CLAUDE.md gained a "Grade A+
+addendum" that applies on top of the Grade A bar. Each phase here must
+have Node-tested pure parts — visuals are flagged, but the data and
+timing behind them are proven.
+
+Phase 18 (previous): mobile layout rebuilt and browser-verified in both
+orientations. Phase 17's mobile layout did not work on the owner's phone, and it was
 not a cache problem: `index.html` had a stray `</div>` that closed
 `.game-layout` before `#touch-controls`, so the Phase 16b "move it inside
 the grid" fix never applied (the comment said inside; the DOM said
@@ -281,6 +295,17 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       full field. Desktop 1200×900 unchanged. `node tests/run.js` 62/62
       incl. two new index.html structure guards (the nesting one fails on
       the Phase 17 markup, passes now).
+- [ ] Phase 19 — Music: sequencer on the AudioContext clock + composed
+      ≥16-bar multi-voice track (js/music.js pure + tests; audio.js voices,
+      compressor, level tempo, duck, stingers, menu variant)
+- [ ] Phase 20 — Animated background (js/backgroundsim.js pure + tests;
+      js/background.js low-res offscreen layer; reduced-motion + hidden-tab)
+- [ ] Phase 21 — Board/piece rendering upgrade (cell sprite sheet, glowing
+      ghost, lock flash, line-clear animation, drop trail, popups, vignette;
+      js/fxtimeline.js pure + tests)
+- [ ] Phase 22 — Screens and UI polish (title shimmer, micro-interactions,
+      mode icons, pause blur, count-ups, HUD tick) — mobile layout untouched
+- [ ] Phase 23 — A+ pass (Grade A bar + A+ addendum re-verified literally)
 - [x] Grade A closeout — every line of CLAUDE.md's Grade A bar re-checked
       against the actual repo state this session:
       tests/run.js exits 0 (60 passed / 0 failed) and covers Board, Piece,
