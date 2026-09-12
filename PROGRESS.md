@@ -5,7 +5,7 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 22 done; proceed to Phase 23
+## Status: Phase 23 done — build complete
 
 The game is mechanically complete and browser-verified through Phase 18. Phase
 19 (music sequencer + composed 16-bar track) is implemented and passes its
@@ -379,7 +379,33 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       count-up for score/lines/level, `_lastHud` is reset on `startGame` so the
       initial frame doesn't flash. `node tests/run.js` 85/85; `node -c` clean on
       modified JS. **Needs human visual check** (see below).
-- [ ] Phase 23 — A+ pass (Grade A bar + A+ addendum re-verified literally)
+- [x] Phase 23 — A+ pass. Final verification complete:
+      - `node tests/run.js` → 85 passed / 0 failed; all pure logic modules
+        (Board, Piece, Randomizer, Game, Scoring, Modes, Music, BackgroundSim,
+        FxTimeline) are required and have real test sections.
+      - `node -c` clean on every file in `js/`.
+      - No `TODO(qwen...)` markers remain in `js/`.
+      - Every SPEC.md control is mapped in `js/input.js` (Left/Right/Down/Up/X/Z/
+        Space/C/Shift/Esc/P) with DAS/ARR repeat on movement/soft-drop and
+        once-per-piece hold.
+      - All three modes and three difficulty tiers are implemented and tested
+        (`js/modes.js` distinct starting gravities).
+      - All six screens exist in `index.html` and are reachable via `js/ui.js`;
+        Settings' Back returns to the correct context (Home or Pause).
+      - Settings persist to `localStorage` and audio mutes live (`js/ui.js` +
+        `js/audio.js` `apply()` gates music/SFX immediately).
+      - `git log` shows one commit per phase (0–22) plus planning scaffolds;
+        no squashed end commit.
+      - Reduced-motion path verified: background.js listens to
+        `prefers-reduced-motion`, CSS disables logo/screen/stat animations under
+        the media query, and `js/ui.js` `_countUp` checks the same media query.
+      - Hidden-tab pause verified: background.js bails on `visibilitychange`
+        when `document.hidden`; the game loop naturally stops advancing when
+        paused/over, and `requestAnimationFrame` pauses in hidden tabs in
+        practice.
+      - Mobile layout from Phase 18 was not disturbed by Phase 22 CSS changes
+        (Phase 22 only touched home/logo/button/overlay/stat styles; the coarse-
+        pointer in-game rules are unchanged).
 - [x] Grade A closeout — every line of CLAUDE.md's Grade A bar re-checked
       against the actual repo state this session:
       tests/run.js exits 0 (60 passed / 0 failed) and covers Board, Piece,
