@@ -193,6 +193,7 @@
       rotation: g.current.rotation,
       x: g.current.x,
       y: g.current.y,
+      fromY: g.current.y - cells, // Phase 21: trail start for the drop path
       };
     lockAndNext(g);
     return cells;
@@ -266,7 +267,12 @@
         return;
       }
     } else {
-      g.lastEvents = { type: 'lock' };
+      // Phase 21: include the locked cells so the renderer can flash them.
+      g.lastEvents = {
+        type: 'lock',
+        piece: c.type,
+        cells: Piece.getCells(c.type, c.rotation, c.x, c.y),
+      };
       emit(g, 'lock');
     }
     spawnNext(g);

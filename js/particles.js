@@ -90,6 +90,46 @@
         }
       },
 
+     // Lock sparkle: small bright flecks at the cells that just locked.
+     // Used for both hard-drop and soft-drop locks.
+    spawnLock(cells, type, now) {
+      if (!cells || !type) return;
+      this._init();
+      const color = T.Render ? (T.Render.COLORS[type] || '#aaa') : '#aaa';
+      for (let i = 0; i < cells.length; i++) {
+        const cx = cells[i][0] * CELL + CELL / 2;
+        const py = (cells[i][1] - BUFFER) * CELL + CELL / 2;
+        if (py < 0) continue;
+        for (let k = 0; k < 4; k++) {
+          this._spawn(
+            cx + rnd(-10, 10), py + rnd(-10, 10),
+            rnd(-0.04, 0.04), rnd(-0.04, 0.04),
+            now, rnd(120, 220),
+            rnd(2, 4),
+            Math.random() < 0.5 ? '#ffffff' : color
+          );
+        }
+      }
+    },
+
+     // Level-up ring: an outward-bursting circle of particles from the board
+     // center, used when the level increments.
+    spawnLevelUp(boardCenterX, boardCenterY, now) {
+      this._init();
+      const count = 24;
+      for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 * i) / count;
+        const speed = rnd(0.10, 0.22);
+        this._spawn(
+          boardCenterX, boardCenterY,
+          Math.cos(angle) * speed, Math.sin(angle) * speed,
+          now, rnd(500, 800),
+          rnd(3, 6),
+          Math.random() < 0.5 ? '#ffffff' : '#33e0ff'
+        );
+      }
+    },
+
      // Hard-drop impact puff: a little dust at the piece's landing cells,
      // alongside the existing board shake — small, short-lived, mostly the
      // piece's own color with a few pale flecks.

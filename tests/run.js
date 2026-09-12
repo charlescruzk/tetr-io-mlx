@@ -24,6 +24,8 @@ const Modes = require(path.join(__dirname, '..', 'js', 'modes.js'));
 const Music = require(path.join(__dirname, '..', 'js', 'music.js'));
 // Phase 20: animated background simulation (pure, canvas-free).
 const BackgroundSim = require(path.join(__dirname, '..', 'js', 'backgroundsim.js'));
+// Phase 21: render-side animation timelines and popup pool (pure).
+const FxTimeline = require(path.join(__dirname, '..', 'js', 'fxtimeline.js'));
 
 let pass = 0;
 let fail = 0;
@@ -780,6 +782,128 @@ test('background: derive returns bounded values and valid HSLA strings', () => {
     `derived color should be a valid HSLA string: ${d.color}`);
   assert(/^hsla\(\d+(\.\d+)?, \d+%, \d+%, [\d.]+\)$/.test(d.glow),
     `derived glow should be a valid HSLA string: ${d.glow}`);
+});
+
+// ---------------------------------------------------------------- Phase 21
+// Render-side animation timelines (js/fxtimeline.js) and model-signal tests.
+// The heavy canvas work stays browser-only; the timing math and popup pool
+// are proven here.
+
+test('fxtimeline: line-clear starts with flash and ends fully dissolved/slid', () => {
+  const d = FxTimeline.DURATIONS.lineClear;
+  const start = FxTimeline.lineClearProgress(0);
+  assertEqual(start.flash, 1, 'flash starts at full');
+  assertEqual(start.dissolve, 0, 'nothing dissolved at start');
+  assertEqual(start.slide, 0, 'no slide at start');
+
+  const end = FxTimeline.lineClearProgress(d);
+  assertEqual(end.flash, 0, 'flash gone by end');
+  assertEqual(end.dissolve, 1, 'fully dissolved by end');
+  assertEqual(end.slide, 1, 'fully slid by end');
+  assert(!end.active, 'not active at end');
+
+  const mid = FxTimeline.lineClearProgress(d * 0.5);
+  assert(mid.active, 'active at midpoint');
+  assert(mid.flash < start.flash, 'flash fades by midpoint');
+  assert(mid.dissolve > 0 && mid.dissolve < 1, 'partially dissolved at midpoint');
+  assert(mid.slide > 0 && mid.slide <= 1, 'partially slid at midpoint');
+});
+
+test('fxtimeline: line-clear slide offset is non-decreasing', () => {
+  const d = FxTimeline.DURATIONS.lineClear;
+  let prev = -1;
+  for (let t = 0; t <= d; t += 10) {
+    const cur = FxTimeline.lineClearProgress(t).slide;
+    assert(cur >= prev - 0.001, `slide regressed at t=${t}: ${cur} < ${prev}`);
+    prev = cur;
+  }
+});
+
+test('fxtimeline: lock flash and popup progress are bounded', () => {
+  const dLock = FxTimeline.DURATIONS.lockFlash;
+  assertEqual(FxTimeline.lockFlashProgress(0), 0, 'lock flash off at t=0');
+  assertEqual(FxTimeline.lockFlashProgress(dLock), 0, 'lock flash off after duration');
+  assert(FxTimeline.lockFlashProgress(dLock / 2) > 0, 'lock flash on during duration');
+
+  const dPop = FxTimeline.DURATIONS.popup;
+  const start = FxTimeline.popupProgress(0);
+  assert(!start.active, 'popup not active at t=0');
+  const end = FxTimeline.popupProgress(dPop);
+  assert(!end.active, 'popup not active after duration');
+  const mid = FxTimeline.popupProgress(dPop / 2);
+  assert(mid.active, 'popup active during duration');
+  assert(mid.yOffsetPx <= 0 && mid.yOffsetPx >= -40, 'popup rises up to 40px');
+  assert(mid.alpha > 0 && mid.alpha <= 1, 'popup alpha bounded');
+});
+
+test('fxtimeline: hard-drop trail fades and reduces copies', () => {
+  const d = FxTimeline.DURATIONS.hardDropTrail;
+  assert(!FxTimeline.hardDropTrailProgress(0).active, 'trail off at t=0');
+  const end = FxTimeline.hardDropTrailProgress(d);
+  assert(!end.active && end.copies === 0, 'trail off after duration');
+  const early = FxTimeline.hardDropTrailProgress(d * 0.2);
+  assert(early.active && early.copies >= 1, 'trail active early');
+  const late = FxTimeline.hardDropTrailProgress(d * 0.8);
+  assert(late.copies <= early.copies, 'fewer copies as trail fades');
+});
+
+test('fxtimeline: danger tint alpha is bounded and ramps with stack height', () => {
+  assertEqual(FxTimeline.dangerTintAlpha(0), 0, 'empty stack = no tint');
+  assertEqual(FxTimeline.dangerTintAlpha(12), 0, 'below danger threshold = no tint');
+  const low = FxTimeline.dangerTintAlpha(14);
+  const high = FxTimeline.dangerTintAlpha(19);
+  assert(high > low, 'tint grows toward the top');
+  assert(FxTimeline.dangerTintAlpha(99) <= 0.30, 'tint capped');
+});
+
+test('fxtimeline: popup pool is bounded and overwrites oldest', () => {
+  const state = FxTimeline.Popups.create();
+  assertEqual(state.max, FxTimeline.POPUP_MAX, 'pool size matches POPUP_MAX');
+  for (let i = 0; i < FxTimeline.POPUP_MAX + 10; i++) {
+    FxTimeline.Popups.spawn(state, 'x' + i, 0, 0, i);
+  }
+  assert(FxTimeline.Popups.count(state, FxTimeline.POPUP_MAX + 20) <= FxTimeline.POPUP_MAX,
+    'live popup count stays bounded');
+  // The oldest slots were overwritten, so the earliest texts are gone.
+  const texts = new Set(state.slots.filter((s) => s.live).map((s) => s.text));
+  assert(!texts.has('x0'), 'oldest popup was overwritten');
+  assert(texts.has('x' + (FxTimeline.POPUP_MAX + 9)), 'newest popup survived');
+});
+
+test('game: lock event carries the locked cells and piece type', () => {
+  const g = Game.create();
+  // A soft-drop-to-floor lock is the easiest deterministic lock.
+  g.dropToFloor();
+  g.tick(Game.LOCK_DELAY_MS + 1);
+  assertEqual(g.lastEvents.type, 'lock', 'a lock event fires');
+  assert(g.lastEvents.piece, 'lock event carries the piece type');
+  assert(Array.isArray(g.lastEvents.cells) && g.lastEvents.cells.length === 4,
+    'lock event carries the 4 locked cells');
+});
+
+test('game: hardDropLanding includes the drop start y', () => {
+  const g = Game.create();
+  const startY = g.current.y;
+  g.hardDrop();
+  assert(g.hardDropLanding != null, 'hard drop landing recorded');
+  assertEqual(g.hardDropLanding.fromY, startY,
+    'landing records the y before the drop');
+  assert(g.hardDropLanding.y > g.hardDropLanding.fromY,
+    'drop moved the piece downward');
+});
+
+test('game: model does not add new presentation-only fields', () => {
+  // The renderer reads existing signals (lastEvents, hardDropAt,
+  // hardDropLanding, level, score, state). This test guards against adding
+  // presentation-only fields like flash/glow/sprite directly to the game object.
+  const src = require('fs').readFileSync(path.join(__dirname, '..', 'js', 'game.js'), 'utf8');
+  const noComment = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const forbidden = ['flash', 'glow', 'sprite', 'vignette', 'pulse', 'shake'];
+  for (const f of forbidden) {
+    assert(!noComment.includes(f), `game.js contains presentation-only keyword "${f}"`);
+  }
+  assert(!noComment.includes('T.Render') && !noComment.includes('T.Particles'),
+    'game.js must not import renderer/particle modules');
 });
 
 // ---------------------------------------------------------------- Phase 15
