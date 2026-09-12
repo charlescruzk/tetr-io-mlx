@@ -22,6 +22,8 @@ const Scoring = require(path.join(__dirname, '..', 'js', 'scoring.js'));
 const Modes = require(path.join(__dirname, '..', 'js', 'modes.js'));
 // Phase 19: music sequencer data + timing.
 const Music = require(path.join(__dirname, '..', 'js', 'music.js'));
+// Phase 20: animated background simulation (pure, canvas-free).
+const BackgroundSim = require(path.join(__dirname, '..', 'js', 'backgroundsim.js'));
 
 let pass = 0;
 let fail = 0;
@@ -693,6 +695,91 @@ test('music: stinger patterns are non-empty and fit inside one bar', () => {
       assert(note.midi >= 0 && note.midi <= 127, `${name} stinger midi valid`);
     }
   }
+});
+
+// ---------------------------------------------------------------- Phase 20
+// Animated background simulation (js/backgroundsim.js) — pure motion math,
+// no canvas. Tests cover creation, wrap-around, reduced motion, palette
+// reactions, and bounded derived colors.
+
+test('background: create returns the expected shape count and valid types', () => {
+  const state = BackgroundSim.create();
+  assertEqual(state.shapes.length, BackgroundSim.DEFAULT_SHAPE_COUNT,
+    'default state should have DEFAULT_SHAPE_COUNT shapes');
+  for (const s of state.shapes) {
+    assert(BackgroundSim.PIECE_TYPES.includes(s.type), `shape type ${s.type} should be a valid piece`);
+    assert(s.x >= 0 && s.x < 1, 'shape x should be initialized in [0,1)');
+    assert(s.y >= 0 && s.y < 1, 'shape y should be initialized in [0,1)');
+    assert(s.size > 0, 'shape size should be positive');
+  }
+});
+
+test('background: step wraps positions around the unit torus', () => {
+  const state = BackgroundSim.create({ count: 1 });
+  const s = state.shapes[0];
+  s.x = 0.99;
+  s.y = 0.01;
+  s.vx = 0.05;
+  s.vy = -0.03;
+  BackgroundSim.step(state, 1000, {});
+  assert(s.x >= 0 && s.x < 1, 'x should wrap into [0,1)');
+  assert(s.y >= 0 && s.y < 1, 'y should wrap into [0,1)');
+  assert(s.x < 0.99, 'x wrapped forward');
+  assert(s.y > 0.01, 'y wrapped backward');
+});
+
+test('background: reduced motion freezes positions', () => {
+  const state = BackgroundSim.create({ count: 3 });
+  const before = state.shapes.map((s) => ({ x: s.x, y: s.y, rot: s.rot }));
+  BackgroundSim.step(state, 500, { reducedMotion: true });
+  for (let i = 0; i < state.shapes.length; i++) {
+    assertEqual(state.shapes[i].x, before[i].x, 'reduced motion should keep x unchanged');
+    assertEqual(state.shapes[i].y, before[i].y, 'reduced motion should keep y unchanged');
+    assertEqual(state.shapes[i].rot, before[i].rot, 'reduced motion should keep rotation unchanged');
+  }
+});
+
+test('background: event pulse is injected and decays toward zero', () => {
+  const state = BackgroundSim.create({ count: 1 });
+  BackgroundSim.step(state, 0, { eventPulse: 0.6 });
+  assert(state.eventPulse >= 0.5, 'eventPulse should accept the injected pulse');
+  const peak = state.eventPulse;
+  BackgroundSim.step(state, 1000, {});
+  assert(state.eventPulse < peak, 'eventPulse should decay after one second');
+  BackgroundSim.step(state, 10000, {});
+  assertEqual(state.eventPulse, 0, 'eventPulse should fully decay given enough time');
+});
+
+test('background: palette reacts to tetris, line clear, and level up', () => {
+  const dark = BackgroundSim.create();
+  BackgroundSim.step(dark, 16, {});
+  assertEqual(dark.palette, 'dark', 'quiet state stays dark');
+
+  const clear = BackgroundSim.create();
+  BackgroundSim.step(clear, 16, { lineClear: true });
+  assertEqual(clear.palette, 'clear', 'line clear switches to clear palette');
+
+  const tetris = BackgroundSim.create();
+  BackgroundSim.step(tetris, 16, { tetris: true });
+  assertEqual(tetris.palette, 'tetris', 'tetris switches to tetris palette');
+
+  const levelUp = BackgroundSim.create();
+  BackgroundSim.step(levelUp, 16, { levelUp: true });
+  assertEqual(levelUp.palette, 'clear', 'level up uses the clear palette');
+});
+
+test('background: derive returns bounded values and valid HSLA strings', () => {
+  const state = BackgroundSim.create({ count: 1 });
+  BackgroundSim.step(state, 0, { eventPulse: 0.8 });
+  const d = BackgroundSim.derive(state, state.shapes[0]);
+  assert(d.x >= 0 && d.x < 1, 'derived x in [0,1)');
+  assert(d.y >= 0 && d.y < 1, 'derived y in [0,1)');
+  assert(d.size > 0, 'derived size positive');
+  assert(d.alpha >= 0 && d.alpha <= 0.9, 'derived alpha stays bounded');
+  assert(/^hsla\(\d+(\.\d+)?, \d+%, \d+%, [\d.]+\)$/.test(d.color),
+    `derived color should be a valid HSLA string: ${d.color}`);
+  assert(/^hsla\(\d+(\.\d+)?, \d+%, \d+%, [\d.]+\)$/.test(d.glow),
+    `derived glow should be a valid HSLA string: ${d.glow}`);
 });
 
 // ---------------------------------------------------------------- Phase 15

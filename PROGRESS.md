@@ -5,11 +5,16 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 19 done; proceed to Phase 20
+## Status: Phase 20 done; proceed to Phase 21
 
 The game is mechanically complete and browser-verified through Phase 18. Phase
 19 (music sequencer + composed 16-bar track) is implemented and passes its
-pure tests (70/70). Phase 20 (animated background) is next.
+pure tests (70/70). Phase 20 (animated background) is implemented: a pure
+toroidal drift simulation in js/backgroundsim.js with 6 Node tests, a browser
+renderer in js/background.js that draws to a low-res offscreen canvas upscaled
+behind the UI, reduced-motion and visibilitychange handling, and reactive
+palette/event pulses from gameplay. All tests pass (76/76); `node -c` clean on
+modified JS. Phase 21 (board/piece rendering upgrade) is next.
 The owner's verdict: it plays right but "feels really dry" — four-note
 arpeggio music, flat cells, flat background, effects only on clears and
 drops. SPEC.md's new "Presentation upgrade" section defines the bar
@@ -311,8 +316,23 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       scheduler coverage, loop boundary, jittered 60s playback, and stinger data.
       `node tests/run.js` 70/70; `node -c` clean on all js/. Static check done.
       **Needs human audio check** (see below).
-- [ ] Phase 20 — Animated background (js/backgroundsim.js pure + tests;
-      js/background.js low-res offscreen layer; reduced-motion + hidden-tab)
+- [x] Phase 20 — Animated background. New js/backgroundsim.js (dual-export,
+      pure): 18 drifting tetromino silhouettes on a unit torus, palette shifts
+      for dark/clear/tetris states, per-shape and global event pulses with
+      exponential decay, reduced-motion freeze. js/background.js (browser-only):
+      creates a full-screen #bg-canvas behind the UI, draws a dark aurora base +
+      moving radial blobs + the simulated pieces with glow, uses a low-res
+      offscreen canvas (max 512×512, 1/4 display DPR) upscaled to the display
+      canvas for a soft, cheap blur. Respects `prefers-reduced-motion` (freezes
+      the simulation and becomes a static gradient) and `visibilitychange` (stops
+      drawing while hidden). Reacts to g.lastEvents (line clear, Tetris, lock) and
+      g.level to drive pulse intensity/speed. Tests: 6 new background tests in
+      tests/run.js (shape count/validity, wrap-around, reduced-motion freeze,
+      pulse decay, palette reactions, bounded derived HSLA) — 76/76 pass.
+      `node -c` clean on js/backgroundsim.js, js/background.js, js/main.js,
+      tests/run.js. Static CSS check done. **Needs human visual check** (see
+      below): confirm the background animates behind Home/Mode Select/Game,
+      reduced-motion shows a static gradient, and it doesn't obscure UI text.
 - [ ] Phase 21 — Board/piece rendering upgrade (cell sprite sheet, glowing
       ghost, lock flash, line-clear animation, drop trail, popups, vignette;
       js/fxtimeline.js pure + tests)
@@ -372,6 +392,23 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       rendering/CSS only and carry the Phase 16 re-check flag below.
 
 ## Needs human visual check
+
+**Phase 20 (animated background) — simulation math is Node-tested; the canvas
+look needs a real browser pass.** Open `index.html` by double-click (file://)
+and verify:
+
+- **Background behind menus**: on Home / Mode Select / Settings, a dark aurora
+  with slowly drifting tetromino silhouettes is visible behind the translucent
+  screen panels; the menu text remains legible.
+- **Background in-game**: during play the animated background shows through
+  around and behind the board/panels (the game screen itself is transparent).
+- **Reactive pulses**: clearing lines (especially a Tetris), leveling up, or
+  locking a piece briefly brightens/moves the silhouettes; the pulse then fades.
+- **Reduced motion**: with the OS/browser "reduce motion" preference on, the
+  animation freezes and becomes a static dark gradient (no moving pieces).
+- **No jank / overlap**: the background canvas stays behind all UI content
+  (z-index correct), and the low-res upscaling does not look blocky at normal
+  viewing distance.
 
 **Phase 19 (music) — machine-verified pure timing + scheduler; needs a real
 browser/audio pass for what Node cannot judge.** Open `index.html` by double-

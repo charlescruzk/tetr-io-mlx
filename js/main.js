@@ -45,6 +45,10 @@
       // the menu variant keeps playing; the audio layer gates on its own flags.
       if (T.Audio && T.Audio.frame) T.Audio.frame(g);
 
+      // Phase 20: pump the animated background. Runs everywhere so the menus
+      // aren't static, but pauses on visibilitychange/reduced motion internally.
+      if (T.Background && T.Background.frame) T.Background.frame(g);
+
        // React to any playing→X transition since the previous frame ended —
        // whether it happened inside g.tick or via input between frames.
       if (prev === 'playing') {
