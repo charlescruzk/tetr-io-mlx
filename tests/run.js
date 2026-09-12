@@ -20,6 +20,8 @@ const Game = require(path.join(__dirname, '..', 'js', 'game.js'));
 const Scoring = require(path.join(__dirname, '..', 'js', 'scoring.js'));
 // Phase 8: game modes.
 const Modes = require(path.join(__dirname, '..', 'js', 'modes.js'));
+// Phase 19: music sequencer data + timing.
+const Music = require(path.join(__dirname, '..', 'js', 'music.js'));
 
 let pass = 0;
 let fail = 0;
@@ -541,6 +543,156 @@ test('classic and marathon are endless (no win target)', () => {
 test('getConfig throws on an unknown mode or difficulty', () => {
   assertThrows(() => Modes.getConfig('freestyle', 'normal'), 'unknown mode');
   assertThrows(() => Modes.getConfig('classic', 'medium'), 'unknown difficulty');
+});
+
+// ---------------------------------------------------------------- Phase 19
+// Music sequencer (js/music.js) — pure data + timing. The audio layer in
+// js/audio.js consumes this; the tests prove the patterns, scheduling, and
+// duck envelope are sane.
+
+test('music: every voice has the same bar count as SONG.bars', () => {
+  const song = Music.SONG;
+  for (const voice of song.voices) {
+    assertEqual(voice.pattern.length, song.bars,
+      `${voice.name} should have ${song.bars} bars`);
+  }
+});
+
+test('music: every note has a valid midi number and lies inside its bar', () => {
+  const song = Music.SONG;
+  for (const voice of song.voices) {
+    for (let bar = 0; bar < voice.pattern.length; bar++) {
+      for (const note of voice.pattern[bar]) {
+        assert(note.midi >= 0 && note.midi <= 127,
+          `${voice.name} bar ${bar}: midi ${note.midi} out of range`);
+        assert(note.beat >= 0 && note.beat < song.beatsPerBar,
+          `${voice.name} bar ${bar}: beat ${note.beat} outside [0,${song.beatsPerBar})`);
+        assert(note.durBeats > 0,
+          `${voice.name} bar ${bar}: durBeats must be positive`);
+      }
+    }
+  }
+});
+
+test('music: tempoForLevel is non-decreasing and capped', () => {
+  const base = Music.SONG.baseBpm;
+  let prev = Music.tempoForLevel(1, base);
+  assertEqual(prev, base, 'tempo at level 1 equals the base BPM');
+  for (let lv = 2; lv <= 30; lv++) {
+    const cur = Music.tempoForLevel(lv, base);
+    assert(cur >= prev, `tempo should not decrease from level ${lv - 1} to ${lv}`);
+    assert(cur <= 176, `tempo at level ${lv} (${cur}) exceeds the cap`);
+    prev = cur;
+  }
+  assertEqual(Music.tempoForLevel(100, base), 176, 'very high level hits the cap');
+});
+
+test('music: duck envelope starts at unity, dips, and returns to unity', () => {
+  assertEqual(Music.duckGain(0), 1, 'duck gain starts at unity');
+  assertEqual(Music.duckGain(200), 1, 'duck gain returns to unity after the envelope');
+  const dip = Music.duckGain(20);
+  assert(dip < 1 && dip > 0.5, 'duck gain dips in the middle but not to zero');
+  assert(Music.duckGain(5) >= Music.duckGain(20),
+    'attack should be higher (closer to unity) than the dip');
+  assert(Music.duckGain(100) > Music.duckGain(20),
+    'release should recover from the dip');
+});
+
+test('music: scheduler covers one full loop with every pattern note exactly once', () => {
+  const song = Music.SONG;
+  const bpm = song.baseBpm;
+  const beatDur = Music.beatDuration(bpm);
+  const totalBeats = Music.totalBeats(song);
+  const totalSeconds = totalBeats * beatDur;
+
+  // One big lookahead window over the whole loop.
+  const res = Music.schedule(song, 0, 0, totalSeconds, bpm);
+  let expected = 0;
+  for (const voice of song.voices) {
+    for (const bar of voice.pattern) expected += bar.length;
+  }
+  assertEqual(res.notes.length, expected,
+    'scheduler should emit every note in the 16-bar loop exactly once');
+
+  // Every returned note must lie in the requested absolute window and carry
+  // valid derived fields.
+  for (const n of res.notes) {
+    assert(n.t >= 0 && n.t < totalSeconds,
+      `note at ${n.t} outside [0,${totalSeconds})`);
+    assert(n.dur > 0, 'scheduled note has a positive duration');
+    assert(n.freq > 0, 'scheduled note has a positive frequency');
+    assert(n.vel > 0 && n.vel <= 1, 'velocity in range');
+  }
+});
+
+test('music: scheduler loops seamlessly without duplicating notes across windows', () => {
+  const song = Music.SONG;
+  const bpm = song.baseBpm;
+  const beatDur = Music.beatDuration(bpm);
+  const totalBeats = Music.totalBeats(song);
+  const totalSeconds = totalBeats * beatDur;
+
+  // First loop: [0, totalSeconds).
+  const first = Music.schedule(song, 0, 0, totalSeconds, bpm);
+  // Second loop: [totalSeconds, 2*totalSeconds).
+  const second = Music.schedule(song, totalBeats, totalSeconds, 2 * totalSeconds, bpm);
+  assertEqual(second.notes.length, first.notes.length,
+    'second loop should schedule the same number of notes as the first');
+
+  const firstKeys = new Set(first.notes.map((n) => `${n.voice}|${n.midi}|${Math.round(n.t * 1000)}`));
+  for (const n of second.notes) {
+    const key = `${n.voice}|${n.midi}|${Math.round(n.t * 1000)}`;
+    assert(!firstKeys.has(key), `second-loop note ${key} duplicates a first-loop note`);
+  }
+
+  // The loop boundary is seamless: the first note of the second window starts
+  // exactly at (or very near) totalSeconds with no overlap into the first.
+  const firstSecond = second.notes[0];
+  assert(firstSecond.t >= totalSeconds && firstSecond.t < totalSeconds + beatDur,
+    'second loop should start right at the boundary, with no gap');
+  for (const n of second.notes) {
+    assert(n.t >= totalSeconds && n.t < 2 * totalSeconds,
+      'second-loop notes must lie inside [totalSeconds, 2*totalSeconds)');
+  }
+});
+
+test('music: scheduler does not fall behind during jittered 60s playback', () => {
+  const song = Music.SONG;
+  const bpm = song.baseBpm;
+  let cursor = 0;
+  let now = 0;
+  let lastUntil = 0;
+  let totalScheduledWindow = 0;
+  let steps = 0;
+  // Jittered frame times: 50-150ms between scheduler calls.
+  while (now < 60) {
+    const lookahead = 0.08 + Math.random() * 0.12; // 80-200ms ahead
+    const until = now + lookahead;
+    const res = Music.schedule(song, cursor, now, until, bpm);
+    assert(res.cursor >= cursor - 0.0001, 'cursor should not move backwards');
+    cursor = res.cursor;
+    assert(res.notes.every((n) => n.t >= now && n.t < until),
+      'all scheduled notes must lie inside the requested lookahead window');
+    totalScheduledWindow += (until - now);
+    lastUntil = until;
+    now += lookahead * 0.7; // frame dt is a bit less than lookahead
+    steps++;
+  }
+  assert(steps > 100, 'simulation ran for many scheduler ticks');
+  assert(totalScheduledWindow >= 60 - 0.5,
+    'scheduled windows should cover most of the elapsed time');
+  assert(lastUntil >= now, 'last scheduled window should extend past the current time');
+});
+
+test('music: stinger patterns are non-empty and fit inside one bar', () => {
+  for (const name of ['tetris', 'levelup', 'gameover']) {
+    const st = Music.STINGERS[name];
+    assert(st && st.notes && st.notes.length > 0, `${name} stinger should have notes`);
+    for (const note of st.notes) {
+      assert(note.beat >= 0 && note.beat < 4, `${name} stinger note inside one bar`);
+      assert(note.midi >= 0 && note.midi <= 127, `${name} stinger midi valid`);
+    }
+  }
 });
 
 // ---------------------------------------------------------------- Phase 15

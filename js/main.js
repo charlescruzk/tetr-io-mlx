@@ -41,6 +41,10 @@
         T.UI._updateHUD(g);
         }
 
+      // Phase 19: pump the music sequencer. Runs even in paused/over states so
+      // the menu variant keeps playing; the audio layer gates on its own flags.
+      if (T.Audio && T.Audio.frame) T.Audio.frame(g);
+
        // React to any playing→X transition since the previous frame ended —
        // whether it happened inside g.tick or via input between frames.
       if (prev === 'playing') {

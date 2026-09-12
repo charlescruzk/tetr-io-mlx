@@ -5,9 +5,11 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phases 19–23 (presentation upgrade) scaffolded 2026-09-12 — start at Phase 19
+## Status: Phase 19 done; proceed to Phase 20
 
-The game is mechanically complete and browser-verified through Phase 18.
+The game is mechanically complete and browser-verified through Phase 18. Phase
+19 (music sequencer + composed 16-bar track) is implemented and passes its
+pure tests (70/70). Phase 20 (animated background) is next.
 The owner's verdict: it plays right but "feels really dry" — four-note
 arpeggio music, flat cells, flat background, effects only on clears and
 drops. SPEC.md's new "Presentation upgrade" section defines the bar
@@ -295,9 +297,20 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       full field. Desktop 1200×900 unchanged. `node tests/run.js` 62/62
       incl. two new index.html structure guards (the nesting one fails on
       the Phase 17 markup, passes now).
-- [ ] Phase 19 — Music: sequencer on the AudioContext clock + composed
-      ≥16-bar multi-voice track (js/music.js pure + tests; audio.js voices,
-      compressor, level tempo, duck, stingers, menu variant)
+- [x] Phase 19 — Music: sequencer on the AudioContext clock + composed
+      ≥16-bar multi-voice track. New js/music.js (dual-export, pure): a 16-bar
+      original loop with lead/bass/pad/kick/snare/hat voices, tempo-for-level
+      (+2 BPM/level, cap 176), sidechain duck envelope, and stinger data for
+      Tetris/level-up/game-over. js/audio.js rebuilt: master compressor, music
+      bus (static gain -> lowpass -> duck gain), per-voice synthesis,
+      lookahead scheduling via Music.schedule on ctx.currentTime, level-reactive
+      BPM + intensity layer, 150ms duck on line clears/Tetris, stingers on big
+      events, and a softer filtered/lower-gain menu variant when not playing.
+      The old setInterval arpeggio is removed. Tests: 7 music tests covering
+      pattern consistency, note validity, tempo monotonicity/cap, duck envelope,
+      scheduler coverage, loop boundary, jittered 60s playback, and stinger data.
+      `node tests/run.js` 70/70; `node -c` clean on all js/. Static check done.
+      **Needs human audio check** (see below).
 - [ ] Phase 20 — Animated background (js/backgroundsim.js pure + tests;
       js/background.js low-res offscreen layer; reduced-motion + hidden-tab)
 - [ ] Phase 21 — Board/piece rendering upgrade (cell sprite sheet, glowing
@@ -359,6 +372,27 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       rendering/CSS only and carry the Phase 16 re-check flag below.
 
 ## Needs human visual check
+
+**Phase 19 (music) — machine-verified pure timing + scheduler; needs a real
+browser/audio pass for what Node cannot judge.** Open `index.html` by double-
+click (file://), click or press a key once to unlock the AudioContext, and
+listen for:
+- **Distinct voices**: lead (square melody), bass (triangle low end), pad
+  (detuned saws), kick/snare/hat percussion — not a single four-note arpeggio.
+- **Seamless loop**: the 16-bar theme repeats without a click or pause at the
+  bar boundary.
+- **Tempo rising in Marathon**: start a Marathon game; the music should speed
+  up slightly as the level increases (Easy level 1 is base 128 BPM; level 10 is
+  ~146 BPM).
+- **Duck on line clear**: clearing lines produces a short dip in the music
+  volume (~150ms), then it swells back.
+- **Stingers**: a Tetris (4-line clear) plays a brighter celebratory phrase on
+  top of the duck; leveling up and game-over play their own short phrases.
+- **Menu variant**: on Home / Pause / Mode Select / Settings, the music is softer,
+  darker, and filtered compared to the in-game mix.
+- **Toggles live**: Settings → Music Off silences the music immediately; Music
+  On resumes it; SFX Off silences gameplay blips. Reload persists.
+- **No console errors** from the audio path (favicon 404 excepted).
 
 **Phase 18 (mobile rebuild) — machine-verified in Chromium; needs only a
 real-device pass for what a desktop browser can't emulate.** Layout,
