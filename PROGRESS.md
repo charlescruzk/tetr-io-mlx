@@ -5,7 +5,7 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 21 done; proceed to Phase 22
+## Status: Phase 22 done; proceed to Phase 23
 
 The game is mechanically complete and browser-verified through Phase 18. Phase
 19 (music sequencer + composed 16-bar track) is implemented and passes its
@@ -20,7 +20,14 @@ up/Sprint win, board vignette, and top-stack danger tint; js/particles.js
 gained lock sparkle and level-up ring spawners; game.js added only the minimal
 allowed signal extensions (`lock` event carries locked cells/piece;
 `hardDropLanding` carries `fromY`). All tests pass (85/85); `node -c` clean on
-modified JS. Phase 22 (screens/UI polish) is next.
+modified JS. Phase 22 (screens/UI polish) is now implemented: CSS-only home
+logo shimmer + subtle grid/scanline texture behind it, visible `:focus-visible`
+rings for buttons/toggles/mode cards, active-scale micro-interactions,
+CSS-only mode-card icons, pause overlay `backdrop-filter` blur, HUD stat flash
+animation triggered on score/line/value changes with a stronger level-up
+flash, and game-over stat count-up animations. Reduced-motion users get the
+new values instantly with CSS disabling the keyframes. Phase 23 (A+ pass) is
+next.
 The owner's verdict: it plays right but "feels really dry" — four-note
 arpeggio music, flat cells, flat background, effects only on clears and
 drops. SPEC.md's new "Presentation upgrade" section defines the bar
@@ -357,8 +364,21 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       line-clear animation is smooth and doesn't block play, popups don't overlap
       badly, danger tint is visible near the top, frame cost stays sane on a
       phone-class device.
-- [ ] Phase 22 — Screens and UI polish (title shimmer, micro-interactions,
-      mode icons, pause blur, count-ups, HUD tick) — mobile layout untouched
+- [x] Phase 22 — Screens and UI polish (title shimmer, micro-interactions,
+      mode icons, pause blur, count-ups, HUD tick) — mobile layout untouched.
+      style.css changes: home logo `background-clip: text` shimmer with reduced-
+      motion fallback, subtle grid/scanline texture behind the home logo,
+      `:focus-visible` rings for `.btn`/`.seg-btn`/`.toggle`/`.mode-card`/`.tbtn`,
+      active-scale micro-interactions on buttons and cards, CSS-only mode-card
+      icons (`▓`/`↗`/`⏱`), pause overlay `backdrop-filter: blur(8px)`, HUD stat
+      flash animation (`.stat.flash`) and level-up flash (`.stat.level-flash`).
+      js/ui.js changes: `_setHudValue` tracks previous values and briefly flashes
+      the matching stat tile on change, `_flashStat` reflows + removes the class
+      after the animation, `_countUp` animates game-over numeric stats from 0 with
+      a cubic ease-out and a reduced-motion instant path, `_fillGameOver` uses
+      count-up for score/lines/level, `_lastHud` is reset on `startGame` so the
+      initial frame doesn't flash. `node tests/run.js` 85/85; `node -c` clean on
+      modified JS. **Needs human visual check** (see below).
 - [ ] Phase 23 — A+ pass (Grade A bar + A+ addendum re-verified literally)
 - [x] Grade A closeout — every line of CLAUDE.md's Grade A bar re-checked
       against the actual repo state this session:
@@ -457,6 +477,29 @@ double-click (file://), start a game, and verify:
   game should stay smooth during a Tetris + hard-drop + popup burst. The
   renderer uses a pre-blitted sprite sheet and a bounded popup pool so the cost
   is capped; if it janks, flag it.
+
+**Phase 22 (screens/UI polish) — CSS/JS polish; no new Node tests, needs a real
+browser pass.** Open `index.html` by double-click (file://) and verify:
+
+- **Home logo shimmer**: the "TETRIS" title shows a slow horizontal light glide
+  across the letters; the "IO-MLX" subtitle stays a solid accent color.
+- **Home grid texture**: a faint scanline/grid fades in behind the logo inside
+  the card, not spilling outside it.
+- **Focus rings**: tab through the Home/Mode Select/Settings/Pause buttons; each
+  focused control gets a bright cyan outline before any click.
+- **Active micro-interactions**: pressing a menu button or mode card briefly
+  scales it down (~0.98); releasing restores it.
+- **Mode icons**: the Classic/Marathon/Sprint cards each show a small icon above
+  their names (▓/↗/⏱).
+- **Pause blur**: during play, press Esc/P — the overlay darkens and the game
+  board behind it is visibly blurred (`backdrop-filter`).
+- **HUD flashes**: score/line readouts briefly pulse cyan when they change;
+  Marathon level-ups get a stronger flash that also lights the stat border.
+  With OS "reduce motion" on, values change instantly with no pulse.
+- **Game-over count-ups**: on Game Over / Retry, the headline score/level/lines
+  numbers animate up from 0 over ~700ms; the Time row appears instantly.
+- **Mobile untouched**: at 390×844 the in-game layout is unchanged from Phase 18
+  (board still centered, touch clusters in the same places, nothing cut off).
 
 **Phase 19 (music) — machine-verified pure timing + scheduler; needs a real
 browser/audio pass for what Node cannot judge.** Open `index.html` by double-

@@ -31,6 +31,7 @@
     _page: 'home',           // current page
     _settingsReturn: 'home', // where Settings' "Back" returns: 'home' | 'pause'
     _audioReady: false,
+    _lastHud: {},            // previous HUD values for change flashes
 
      // ---- boot ----
      // Cache elements, load settings, wire every button, show the home
@@ -147,6 +148,8 @@
     startGame(mode, difficulty) {
       this.config = { mode: mode, difficulty: difficulty || 'normal' };
       this.game = T.Game.create({ mode: this.config.mode, difficulty: this.config.difficulty });
+         // Reset HUD change tracking so the initial values don't all flash.
+      this._lastHud = {};
          // Route this game's event stream to the SFX bus (move/rotate/lock/…).
       if (T.Audio && T.Audio.install) T.Audio.install(this.game);
       this._showPage('game');
@@ -262,30 +265,53 @@
     _updateHUD(g) {
       if (!g) return;
       const mode = g.config.mode;
-      this.els['val-time'].textContent = this._fmtTime(g.timeMs);
+      this._setHudValue('time', this._fmtTime(g.timeMs), 'flash');
 
       if (mode === 'sprint') {
         this._showStat('stat-score', false);
         this._showStat('stat-level', false);
         this._showStat('stat-lines', true);
         this._showStat('stat-time', true);
-        this.els['val-lines'].textContent = g.linesCleared + ' / 40';
+        this._setHudValue('lines', g.linesCleared + ' / 40', 'flash');
        } else if (mode === 'marathon') {
         this._showStat('stat-score', true);
         this._showStat('stat-level', true);
         this._showStat('stat-lines', true);
         this._showStat('stat-time', true);
-        this.els['val-score'].textContent = g.score;
-        this.els['val-level'].textContent = g.level;
-        this.els['val-lines'].textContent = g.linesCleared;
+        this._setHudValue('score', String(g.score), 'flash');
+        this._setHudValue('level', String(g.level), (this._lastHud.level !== undefined && g.level > Number(this._lastHud.level)) ? 'level-flash' : 'flash');
+        this._setHudValue('lines', String(g.linesCleared), 'flash');
        } else { // classic
         this._showStat('stat-score', true);
         this._showStat('stat-level', false);
         this._showStat('stat-lines', true);
         this._showStat('stat-time', true);
-        this.els['val-score'].textContent = g.score;
-        this.els['val-lines'].textContent = g.linesCleared;
+        this._setHudValue('score', String(g.score), 'flash');
+        this._setHudValue('lines', String(g.linesCleared), 'flash');
         }
+     },
+
+     // Phase 22: set a HUD readout and briefly flash its stat tile when the
+     // value changes. `flashClass` is 'flash' for normal bumps or 'level-flash'
+     // for a level-up. Reduced-motion users get the new value instantly with
+     // no animation (CSS disables the keyframes).
+    _setHudValue(key, value, flashClass) {
+      const last = this._lastHud[key];
+      this._lastHud[key] = value;
+      const el = this.els['val-' + key];
+      if (el) el.textContent = value;
+      if (last !== undefined && last !== value) {
+        const stat = el && el.closest('.stat');
+        if (stat) this._flashStat(stat, flashClass || 'flash');
+        }
+     },
+
+    _flashStat(stat, flashClass) {
+      stat.classList.remove('flash', 'level-flash');
+      void stat.offsetWidth; // force reflow so a re-triggered flash plays
+      stat.classList.add(flashClass);
+      const ms = flashClass === 'level-flash' ? 420 : 280;
+      window.setTimeout(() => stat.classList.remove(flashClass), ms);
      },
 
     _showStat(id, show) {
@@ -312,23 +338,23 @@
       if (mode === 'sprint') {
         title.textContent = won ? '40 Lines!' : 'Incomplete';
         this._statRow(stats, 'Time', this._fmtTime(g.timeMs), true);
-        this._statRow(stats, 'Lines', g.linesCleared + ' / 40', false);
+        this._statRow(stats, 'Lines', String(g.linesCleared), false, true, ' / 40');
        } else {
         title.textContent = won ? 'You Won!' : 'Game Over';
         if (mode === 'marathon') {
-          this._statRow(stats, 'Level', String(g.level), true);
-          this._statRow(stats, 'Score', String(g.score), false);
-          this._statRow(stats, 'Lines', String(g.linesCleared), false);
+          this._statRow(stats, 'Level', String(g.level), true, true);
+          this._statRow(stats, 'Score', String(g.score), false, true);
+          this._statRow(stats, 'Lines', String(g.linesCleared), false, true);
           this._statRow(stats, 'Time', this._fmtTime(g.timeMs), false);
          } else { // classic
-          this._statRow(stats, 'Score', String(g.score), true);
-          this._statRow(stats, 'Lines', String(g.linesCleared), false);
+          this._statRow(stats, 'Score', String(g.score), true, true);
+          this._statRow(stats, 'Lines', String(g.linesCleared), false, true);
           this._statRow(stats, 'Time', this._fmtTime(g.timeMs), false);
          }
        }
      },
 
-    _statRow(container, label, value, headline) {
+    _statRow(container, label, value, headline, countUp, suffix) {
       const row = document.createElement('div');
       row.className = 'stat-row' + (headline ? ' headline' : '');
       const k = document.createElement('span');
@@ -336,10 +362,42 @@
       k.textContent = label;
       const v = document.createElement('span');
       v.className = 'v';
-      v.textContent = value;
+      v.textContent = countUp ? ('0' + (suffix || '')) : value;
       row.appendChild(k);
       row.appendChild(v);
       container.appendChild(row);
+      if (countUp) this._countUp(v, value, suffix || '', 700);
+      return v;
+     },
+
+     // Phase 22: animate a numeric readout from 0 to its final value. Only
+     // plain integers animate; formatted strings like mm:ss are set instantly.
+     // Honors prefers-reduced-motion (no animation). If a new screen replaces
+     // this element mid-animation, the rAF simply writes to the detached node.
+    _countUp(el, targetValue, suffix, durationMs) {
+      const clean = String(targetValue).replace(/,/g, '');
+      const target = parseInt(clean, 10);
+      if (!isFinite(target) || target <= 0) {
+        el.textContent = targetValue + suffix;
+        return;
+        }
+      const reduced = (typeof window !== 'undefined' && window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      if (reduced) {
+        el.textContent = targetValue + suffix;
+        return;
+        }
+      const startTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+      const step = (now) => {
+        const elapsed = now - startTime;
+        const t = Math.min(1, elapsed / durationMs);
+        const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+        const current = Math.round(target * ease);
+        el.textContent = current + suffix;
+        if (t < 1) requestAnimationFrame(step);
+        else el.textContent = targetValue + suffix;
+        };
+      requestAnimationFrame(step);
      },
 
      // ---- settings (persisted + live) ----
