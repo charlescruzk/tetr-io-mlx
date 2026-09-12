@@ -50,6 +50,7 @@
     // Pure render-side juice timers.
     _lastHardDrop: 0,
     _lastEvents: null,
+    _lastGame: null,
     _lastScore: 0,
     _lastLevel: 1,
     _lastState: null,
@@ -57,6 +58,7 @@
     _flashMs: 160,
     _pulseUntil: 0,
     _pulseMs: 130,
+    _pulseAmp: 3,
     _lockFlash: null,
     _lineClear: null,
     _hardDropTrail: null,
@@ -153,11 +155,13 @@
 
       this._clear(c.board, W, H);
 
-      // Hard-drop board shake.
+      // Board shake (hard drop / line clear). Amplitude is set per event in
+      // _shake(); decays linearly over the pulse. Skipped under reduced motion.
       c.board.save();
       if (now < this._pulseUntil) {
         const t = (this._pulseUntil - now) / this._pulseMs;
-        c.board.translate(0, Math.sin(now / 8) * 3 * t);
+        const amp = this._pulseAmp * t;
+        c.board.translate(Math.sin(now / 5) * amp * 0.5, Math.sin(now / 8) * amp);
       }
 
       // Phase 21: hard-drop trail drawn behind the locked piece and before
@@ -200,9 +204,19 @@
     // Advance the render-only FX timers. The model stays pure — all state
     // here is keyed off model signals, never written back to g.
     _updateFx(g, now) {
+      // A new game object (Play / Retry) resets the score and level baselines,
+      // so a Hard-tier start at level 5 doesn't fire a "LEVEL 5" fanfare and a
+      // fresh game doesn't pop "+N" for score carried over from the last one.
+      if (g !== this._lastGame) {
+        this._lastGame = g;
+        this._lastScore = g.score;
+        this._lastLevel = g.level;
+        this._lastHardDrop = g.hardDropAt;
+        this._lastEvents = g.lastEvents;
+      }
       if (g.hardDropAt != null && g.hardDropAt !== this._lastHardDrop) {
         this._lastHardDrop = g.hardDropAt;
-        this._pulseUntil = now + this._pulseMs;
+        this._shake(now, 5, 150);
         if (T.Particles && g.hardDropLanding) {
           T.Particles.spawnHardDrop(g.hardDropLanding, now);
         }
@@ -219,6 +233,7 @@
         const ev = g.lastEvents;
         if (ev && ev.type === 'lineClear') {
           this._flashUntil = now + this._flashMs;
+          this._shake(now, ev.lines === 4 ? 9 : 3 + ev.lines, ev.lines === 4 ? 320 : 180);
           if (T.Particles) {
             T.Particles.spawnLineClear(ev.rows, ev.rowCells, ev.lines === 4, now);
           }
@@ -276,6 +291,17 @@
         }
         this._lastState = g.state;
       }
+    },
+
+    // Start a board shake of the given amplitude (px) and duration (ms).
+    // A stronger shake replaces a weaker one in progress; reduced motion
+    // (via Particles' media query) turns it off entirely.
+    _shake(now, amp, ms) {
+      if (T.Particles && T.Particles.reducedMotion && T.Particles.reducedMotion()) return;
+      if (now < this._pulseUntil && this._pulseAmp > amp) return;
+      this._pulseAmp = amp;
+      this._pulseMs = ms;
+      this._pulseUntil = now + ms;
     },
 
     _lineClearCenterY(rows) {

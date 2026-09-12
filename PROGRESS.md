@@ -5,7 +5,28 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 23 done — build complete
+## Status: Phase 24 done — particle FX exaggerated, published to GitHub
+
+Phase 24 (2026-09-12): the owner's verdict on the Phase 15/21 particles was
+"hardly noticeable" — 2 tiny squares per cell, plain alpha fade. js/particles.js
+was rebuilt: three particle kinds (spinning color chunks, fast sparks drawn as
+motion-blur streaks, pre-rendered radial glow orbs), all composited with
+`lighter` so overlaps bloom; one-shot shockwaves (expanding rings + horizontal
+row sweeps); 4–7× the spawn counts, faster and longer-lived; pool cap 240 → 900.
+Line clears now rip the row apart sideways with a sweep per row, a Tetris adds
+two board-wide rings and a 48-spark radial shower, hard drops slam with a
+ring + row sweep + glow, level-ups fire three staggered rings plus a burst and
+confetti. render.js: board shake now has a per-event amplitude (hard drop 5px,
+line clear 4–6px, Tetris 9px with x-jitter) and fires on line clears too; FX
+baselines (score/level) reset when a new game object appears, fixing a
+pre-existing "LEVEL 5" fanfare on every Hard-tier game start. Reduced motion
+scales every spawn to ~30% and drops the shockwaves and shake. Verified in
+headless Chromium (Playwright, from the scratchpad — nothing added to the
+repo): hard drop, single clear, Tetris, level-up all screenshotted; zero
+console errors besides the favicon 404. `node tests/run.js` 88/88.
+Repo pushed to https://github.com/charlescruzk/tetr-io-mlx (GitHub Pages).
+
+Previous status (Phase 23):
 
 The game is mechanically complete and browser-verified through Phase 18. Phase
 19 (music sequencer + composed 16-bar track) is implemented and passes its
@@ -463,7 +484,26 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       the overlay must follow) — 60 passed / 0 failed. 16a/16b are
       rendering/CSS only and carry the Phase 16 re-check flag below.
 
+- [x] Phase 24 — Exaggerated particle FX. `js/particles.js` rebuilt (chunks /
+      sparks / glow orbs, additive blending, shockwave rings + row sweeps,
+      reduced-motion scaling, MAX 900); `js/render.js` per-event shake incl.
+      line clears + new-game FX baseline reset. Tests: 3 new Phase 24 sections
+      (spawn magnitudes, wave bounds, reduced-motion scaling) → 88/88.
+      Screenshot-verified in headless Chromium; see "Needs human visual check"
+      for what to eyeball on a real display.
+
 ## Needs human visual check
+
+**Phase 24 (exaggerated particles) — seen in headless Chromium screenshots,
+not on a real display.** Play a Classic game and check: hard drop → white
+impact ring + glow + sparks at the landing cells and a 5px shake; a single
+clear → the row splits apart sideways in spinning chunks with a white sweep;
+a Tetris → near-full-board white-out for ~100ms, then two rings, glow orbs
+and a spark shower (the intent is "too much", but confirm the TETRIS! popup
+is still readable after the first frame). Check it holds 60fps on a phone
+during a Tetris (≈650 live particles). With `prefers-reduced-motion: reduce`
+the effects should be small and there should be no rings/sweeps/shake.
+
 
 **Phase 20 (animated background) — simulation math is Node-tested; the canvas
 look needs a real browser pass.** Open `index.html` by double-click (file://)

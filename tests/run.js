@@ -1247,15 +1247,104 @@ test('particles: the pool is bounded at MAX, oldest culled first', () => {
   assertEqual(n, Particles.MAX, 'the ring should have culled the oldest to stay at MAX');
   });
 
+// A no-op 2D context with every method draw() may reach for (Phase 24 uses
+// paths for sparks/rings and transforms for spinning chunks).
+function stubCtx() {
+  const noop = () => {};
+  return { fillRect: noop, strokeRect: noop, beginPath: noop, moveTo: noop,
+           lineTo: noop, arc: noop, stroke: noop, save: noop, restore: noop,
+           translate: noop, rotate: noop, drawImage: noop,
+           globalAlpha: 1, globalCompositeOperation: 'source-over' };
+}
+
 test('particles: they expire after their life and draw() reclaims the slots', () => {
   const last = Board.HEIGHT + Board.BUFFER - 1;
   Particles.spawnLineClear([last], [new Array(Board.WIDTH).fill('T')], true, 1000);
   assert(Particles.count(1100) > 0, 'particles should be alive right after spawning');
-  assertEqual(Particles.count(1000 + 1500), 0,
-    'all particles must expire within their max life (~1.1s)');
-  const stubCtx = { fillRect: () => {}, globalAlpha: 1 };
-  Particles.draw(stubCtx, 1000 + 1500); // must not throw; reclaims slots
-  assertEqual(Particles.count(1000 + 1500), 0, 'nothing resurrects after expiry');
+  assertEqual(Particles.count(1000 + 2100), 0,
+    'all particles must expire within their max life (~1.5s)');
+  const ctx = stubCtx();
+  Particles.draw(ctx, 1000 + 2100); // must not throw; reclaims slots
+  assertEqual(Particles.count(1000 + 2100), 0, 'nothing resurrects after expiry');
+  assertEqual(Particles.waveCount(1000 + 2100), 0, 'shockwaves expire too');
+  assertEqual(ctx.globalCompositeOperation, 'source-over',
+    'draw() must restore the composite op it found (it draws additively)');
+  assertEqual(ctx.globalAlpha, 1, 'draw() must restore globalAlpha');
+  });
+
+// ---------------------------------------------------------------- Phase 24
+// Exaggerated particle FX: the spawners must actually produce a lot more
+// than the Phase 15 counts (that was the owner's complaint — "hardly
+// noticeable"), the one-shot shockwave list must stay bounded, and reduced
+// motion must scale everything back down and drop the shockwaves.
+// `clock()` only moves forward: a draw() at a later time flushes everything
+// (including delayed-birth confetti), which a time-travelling flush wouldn't.
+
+let pClock = 1e9;
+function clock() { return (pClock += 1e7); }
+
+test('particles: a single line clear is a real explosion, a Tetris is bigger', () => {
+  Particles._reduced = false;
+  const last = Board.HEIGHT + Board.BUFFER - 1;
+  const row = new Array(Board.WIDTH).fill('I');
+  Particles.draw(stubCtx(), clock()); // flush everything from earlier tests
+  let now = clock();
+  Particles.spawnLineClear([last], [row], false, now);
+  const single = Particles.count(now + 1);
+  assert(single >= 80, `single clear should spawn >= 80 particles (got ${single})`);
+  assertEqual(Particles.waveCount(now + 1), 1, 'one row sweep per cleared row');
+  Particles.draw(stubCtx(), clock());
+  now = clock();
+  const rows = [last - 3, last - 2, last - 1, last];
+  Particles.spawnLineClear(rows, rows.map(() => row), true, now);
+  const tetris = Particles.count(now + 1);
+  assert(tetris > single * 3, `a Tetris should dwarf a single (${tetris} vs ${single})`);
+  assert(Particles.waveCount(now + 200) >= 5, 'a Tetris adds rings on top of the 4 sweeps');
+  Particles.draw(stubCtx(), now + 100); // must not throw with rings + sparks live
+  });
+
+test('particles: hard drop, lock and level-up all spawn and stay bounded', () => {
+  Particles._reduced = false;
+  Particles.draw(stubCtx(), clock());
+  let now = clock();
+  const landing = { type: 'T', rotation: 0, x: 3, y: Board.BUFFER + Board.HEIGHT - 2 };
+  Particles.spawnHardDrop(landing, now);
+  const drop = Particles.count(now + 1);
+  assert(drop >= 40, `hard drop should spawn >= 40 particles (got ${drop})`);
+  assert(Particles.waveCount(now + 1) >= 2, 'hard drop fires a sweep and a ring');
+  Particles.draw(stubCtx(), clock());
+  now = clock();
+  const cells = Piece.getCells(landing.type, landing.rotation, landing.x, landing.y);
+  Particles.spawnLock(cells, 'T', now);
+  assert(Particles.count(now + 1) >= 16, 'lock sparkle: >= 4 per cell');
+  Particles.draw(stubCtx(), clock());
+  now = clock();
+  Particles.spawnLevelUp(150, 300, now);
+  assert(Particles.count(now + 300) >= 100, 'level-up: burst + confetti');
+  assertEqual(Particles.waveCount(now + 300), 3, 'level-up: three staggered rings');
+  // Waves are bounded independently of the particle ring buffer.
+  for (let i = 0; i < 40; i++) Particles.spawnLevelUp(150, 300, now + i);
+  assert(Particles.waveCount(now + 300) <= 24, 'shockwave list is capped at 24');
+  assert(Particles.count(now + 300) <= Particles.MAX, 'pool still bounded');
+  });
+
+test('particles: reduced motion scales spawns down and drops the shockwaves', () => {
+  Particles.draw(stubCtx(), clock());
+  const last = Board.HEIGHT + Board.BUFFER - 1;
+  const row = new Array(Board.WIDTH).fill('S');
+  Particles._reduced = false;
+  let now = clock();
+  Particles.spawnLineClear([last], [row], true, now);
+  const full = Particles.count(now + 1);
+  Particles.draw(stubCtx(), clock());
+  Particles._reduced = true;
+  now = clock();
+  Particles.spawnLineClear([last], [row], true, now);
+  const reduced = Particles.count(now + 1);
+  assert(reduced > 0 && reduced < full / 2,
+    `reduced motion should spawn far fewer (${reduced} vs ${full})`);
+  assertEqual(Particles.waveCount(now + 1), 0, 'no shockwaves under reduced motion');
+  Particles._reduced = null;
   });
 
 // ---------------------------------------------------------------- Phase 16
