@@ -145,18 +145,31 @@
          // Offsets are [dx, dy] with +y up, so negate dy on this y-down board.
     const kicks = Piece.getKicks(g.current.type, from, to);
     for (let k = 0; k < kicks.length; k++) {
-      const nx = g.current.x + kicks[k][0];
-      const ny = g.current.y - kicks[k][1];
-      if (!collidesAt(g, to, nx, ny)) {
-        g.current.rotation = to;
-        g.current.x = nx;
-        g.current.y = ny;
-        g.onGround = !canDrop(g);
-        if (g.onGround) noteGroundMove(g);
-        return true;
-     }
+      if (tryPlace(g, to, g.current.x + kicks[k][0], g.current.y - kicks[k][1])) return true;
        }
+         // Phase 26 wall-push fallback: SRS gave up, so shove the piece into the
+         // nearest spot where the new orientation fits — sideways first (it
+         // stays pinned against whatever wall it was on), then up to two rows
+         // up. The rotation always happens unless there is genuinely no room.
+    for (let dy = 0; dy <= 2; dy++) {
+      for (let a = 0; a <= 3; a++) {
+        if (tryPlace(g, to, g.current.x - a, g.current.y - dy)) return true;
+        if (a && tryPlace(g, to, g.current.x + a, g.current.y - dy)) return true;
+       }
+     }
     return false;
+  }
+
+  // Commit a rotation at (x, y) if it fits; shared by the SRS kicks and the
+  // wall-push fallback in rotate().
+  function tryPlace(g, rotation, x, y) {
+    if (collidesAt(g, rotation, x, y)) return false;
+    g.current.rotation = rotation;
+    g.current.x = x;
+    g.current.y = y;
+    g.onGround = !canDrop(g);
+    if (g.onGround) noteGroundMove(g);
+    return true;
   }
 
   // Soft drop one row (1 point). Returns true if it moved.

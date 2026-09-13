@@ -5,7 +5,38 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 24 done — particle FX exaggerated, published to GitHub
+## Status: Phase 26 done — leaderboard + wall-rotation fix, published to GitHub
+
+Phase 25 (2026-09-13): per-mode top-10 leaderboard. New pure module
+`js/leaderboard.js` (dual-export, Node-tested) owns the rules: Classic ranks
+score → lines → faster time, Marathon adds level to the tiebreak, Sprint
+records only finished 40-line runs by time (hundredths shown). Each mode has
+its own column set (`COLUMNS`). The run is inserted and written to
+`localStorage` (`tetrio-leaderboard`) the instant a game ends — before any
+name is typed — and the game-over name box renames that saved row live on
+every keystroke (`tetrio-player-name` remembers it for next time). Game over
+shows "NEW RECORD!" / "#N on the … board" / why a run didn't rank, plus the
+standing (or just-beaten) record holder. New Leaderboard overlay (7th screen)
+with mode tabs, reachable from Home and Game Over, Back returns to whichever
+opened it; input is gated off while it's up; a `storage` event from another
+tab reloads the board. `parse()` validates every row so corrupt storage can't
+break boot. input.js no longer swallows game keys typed into a text field.
+Scope note: this is per-browser storage — the project's no-network constraint
+rules out a shared online board without a backend.
+
+Phase 26 (2026-09-13): rotation against a wall. Root cause of the owner's
+"can't rotate when against the wall": the JLSTZ SRS kick table's L-state
+rows (2->3, 3->2, 3->0, 0->3) were mirrored — and the "independent" test
+reference had the same copy error — so every JLSTZ piece in state 3 flush
+against the right wall could not rotate at all (an exhaustive sweep found
+180 failing positions on an empty board). Both tables corrected to canonical
+SRS. Additionally, per the owner's request, `rotate()` now has a wall-push
+fallback after the SRS kicks: it shoves the piece sideways (up to 3 columns,
+staying pinned to the wall) then up to 2 rows up into the nearest fit, so a
+rotation only fails when there is genuinely no room. Sweep is now 0 failures;
+tests 101/101.
+
+Previous status (Phase 24):
 
 Phase 24 (2026-09-12): the owner's verdict on the Phase 15/21 particles was
 "hardly noticeable" — 2 tiny squares per cell, plain alpha fade. js/particles.js
@@ -492,7 +523,30 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       Screenshot-verified in headless Chromium; see "Needs human visual check"
       for what to eyeball on a real display.
 
+- [x] Phase 25 — Leaderboard. `js/leaderboard.js` (pure, 5 test sections) +
+      ui.js storage/game-over/overlay wiring (5 UI integration tests) +
+      index.html/style.css screen + input.js text-field guard. Verified in
+      headless Chromium: typing "Charles K" (with Space) lands in storage,
+      #2 placement shows the record, Sprint tab leads with time, Back returns
+      to Game Over, survives reload, no horizontal overflow at 390px.
+- [x] Phase 26 — Wall rotation. Canonical SRS tables restored (source + test
+      reference), wall-push fallback in `game.js` `rotate()`; regression test
+      for every JLSTZ piece in state 3 at the right wall, an exhaustive
+      empty-board rotation sweep, and a blocked-kicks fallback test.
+
 ## Needs human visual check
+
+**Phase 25 (leaderboard) — seen in headless screenshots only.** Finish a game:
+the name box should take focus by itself after the overlay fades in; typing
+should never move the piece behind it. Check the gold "NEW RECORD!" pulse and
+that the leaderboard overlay's table scrolls sideways (not the page) on a
+narrow phone if the Marathon columns don't fit.
+
+**Phase 26 (wall rotation) — feel check.** Hold a piece against either wall
+and rotate both ways repeatedly: it should always turn and stay flush. Mid-
+stack, a rotation that SRS would have refused may now shove the piece a
+column or two — confirm that feels like help, not a surprise.
+
 
 **Phase 24 (exaggerated particles) — seen in headless Chromium screenshots,
 not on a real display.** Play a Classic game and check: hard drop → white

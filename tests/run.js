@@ -204,10 +204,10 @@ test('Piece.getKicks returns the canonical SRS tables (JLSTZ and I)', () => {
     '1->0': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
     '1->2': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
     '2->1': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
-    '2->3': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
-    '3->2': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
-    '3->0': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
-    '0->3': [[0, 0], [1, 0], [1, 1], [0, -2], [1, 2]],
+    '2->3': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+    '3->2': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+    '3->0': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+    '0->3': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
     };
   const REF_I = {
     '0->1': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
@@ -291,6 +291,60 @@ test('rotation fails and the piece is unchanged when every kick collides', () =>
   assertEqual(g.current.x, 3, 'x is unchanged after a failed rotation');
   assertEqual(g.current.y, 20, 'y is unchanged after a failed rotation');
 });
+
+// Phase 26: the JLSTZ table's L-state rows (2->3, 3->2, 3->0, 0->3) were
+// mirrored, so every JLSTZ piece in state 3 against the right wall could not
+// rotate at all — the owner's "stuck against the wall" report. Guard the
+// fix directly: it must rotate and end up flush against that wall.
+test('SRS kick: a JLSTZ piece in the L state against the right wall rotates (regression)', () => {
+  for (const type of ['J', 'L', 'S', 'T', 'Z']) {
+    for (const dir of [1, -1]) {
+      const g = Game.create();
+      g.current = { type: type, rotation: 3, x: 8, y: 10 }; // occupies columns 8-9
+      g.lockResets = 0;
+      const ok = g.rotate(dir);
+      assert(ok, type + ' state 3 at the right wall should rotate ' + (dir > 0 ? 'CW' : 'CCW'));
+      assertEqual(g.current.rotation, dir > 0 ? 0 : 2, type + ': rotation state advanced');
+      const cols = Piece.getCells(type, g.current.rotation, g.current.x, g.current.y).map((c) => c[0]);
+      assertEqual(Math.max.apply(null, cols), Board.WIDTH - 1, type + ' stays flush against the right wall');
+      }
+    }
+  });
+
+test('rotation sweep: every piece rotates from every legal position on an empty board', () => {
+  let tried = 0;
+  for (const type of ['I', 'J', 'L', 'S', 'T', 'Z']) {
+    for (let rot = 0; rot < 4; rot++) for (const dir of [1, -1]) for (let x = -3; x < Board.WIDTH; x++) {
+      const y = 10;
+      const cells = Piece.getCells(type, rot, x, y);
+      if (cells.some((c) => c[0] < 0 || c[0] >= Board.WIDTH)) continue;
+      const g = Game.create();
+      g.current = { type: type, rotation: rot, x: x, y: y };
+      g.lockResets = 0;
+      tried++;
+      assert(g.rotate(dir), `${type} rot ${rot} at x=${x} dir ${dir} must rotate on an empty board`);
+      }
+    }
+  assert(tried > 100, 'the sweep covered the board');
+  });
+
+test('wall-push fallback: when every SRS kick is blocked, the piece is shoved into the nearest fit', () => {
+  const g = Game.create();
+   // Vertical I flush against the left wall (state 1 occupies column x+2 = 0).
+   // Rotating 1->2 wants columns x..x+3 on row y+2; the SRS kicks land on
+   // x=0 rows y+2 / y+3, so block column 2 on those rows: every kick fails,
+   // and the fallback lifts the piece one row and lays it flat along the wall.
+  g.current = { type: 'I', rotation: 1, x: -2, y: 10 };
+  g.lockResets = 0;
+  g.board[12][2] = 'X';
+  g.board[13][2] = 'X';
+  const ok = g.rotate(1);
+  assert(ok, 'rotation should succeed via the fallback');
+  assertEqual(g.current.rotation, 2, 'rotation advanced');
+  const cells = Piece.getCells('I', 2, g.current.x, g.current.y);
+  assertEqual(Math.min.apply(null, cells.map((c) => c[0])), 0, 'flat I is pinned against the left wall');
+  assert(!Game._internals.collidesAt(g, 2, g.current.x, g.current.y), 'the pushed position does not collide');
+  });
 
 test('the O piece never rotates even when rotation is requested', () => {
   const g = Game.create();
