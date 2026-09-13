@@ -17,9 +17,11 @@
      // The three full pages, cross-faded one at a time.
   const PAGES = ['home', 'mode-select', 'game'];
      // Overlays shown on top of the current page.
-  const OVERLAYS = ['pause', 'settings', 'gameover'];
+  const OVERLAYS = ['pause', 'settings', 'gameover', 'leaderboard'];
 
   const LS_KEY = 'tetrio-settings';
+  const LB_KEY = 'tetrio-leaderboard';   // Phase 25: per-mode top-10 board
+  const NAME_KEY = 'tetrio-player-name'; // Phase 25: last name typed
   const DEFAULTS = { music: true, sfx: true };
 
   const UI = {
@@ -32,6 +34,14 @@
     _settingsReturn: 'home', // where Settings' "Back" returns: 'home' | 'pause'
     _audioReady: false,
     _lastHud: {},            // previous HUD values for change flashes
+    // Phase 25: leaderboard state. `board` is the parsed top-10 data
+    // (js/leaderboard.js shapes it), `_lastEntry` locates the row the
+    // game-over name box edits, `_lbReturn` is where the overlay's Back goes.
+    board: null,
+    playerName: '',
+    _lastEntry: null,        // { mode, id, rank } of the run just saved
+    _lbMode: 'classic',      // tab shown on the leaderboard screen
+    _lbReturn: 'home',       // 'home' | 'gameover'
 
      // ---- boot ----
      // Cache elements, load settings, wire every button, show the home
@@ -39,6 +49,7 @@
     init() {
       this._cache();
       this._loadSettings();
+      this._loadLeaderboard();
       this._bind();
       this._syncToggles();
          // Push the persisted toggles into the audio layer now, so the first
@@ -69,6 +80,12 @@
       this.els['stat-lines'] = document.getElementById('stat-lines');
       this.els['stat-level'] = document.getElementById('stat-level');
       this.els['stat-time'] = document.getElementById('stat-time');
+      // Phase 25
+      for (const id of ['gameover-rank', 'gameover-record', 'gameover-name-wrap',
+                        'gameover-name', 'leaderboard-seg', 'leaderboard-record',
+                        'leaderboard-table', 'leaderboard-empty']) {
+        this.els[id] = document.getElementById(id);
+        }
      },
 
      // ---- button wiring ----
@@ -84,6 +101,30 @@
       on('btn-settings-back', () => this.closeSettings());
       on('btn-retry', () => this.restart());
       on('btn-menu', () => this.goHome());
+      // Phase 25: leaderboard navigation + live name entry.
+      on('btn-leaderboard-home', () => this.openLeaderboard('home'));
+      on('btn-leaderboard-gameover', () => this.openLeaderboard('gameover'));
+      on('btn-leaderboard-back', () => this.closeLeaderboard());
+      const seg = this.els['leaderboard-seg'];
+      if (seg) {
+        for (const btn of seg.children) {
+          on(btn, () => this._showLeaderboardMode(btn.dataset.mode));
+          }
+        }
+      const nameEl = this.els['gameover-name'];
+      if (nameEl) {
+        nameEl.addEventListener('input', () => this._renameEntry(nameEl.value));
+        nameEl.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === 'Escape') nameEl.blur();
+          });
+        }
+      // Another tab of the game saving a run updates this one immediately.
+      window.addEventListener('storage', (e) => {
+        if (e && e.key === LB_KEY) {
+          this._loadLeaderboard();
+          this._renderLeaderboard();
+          }
+        });
       on('toggle-music', () => this._flip('music'));
       on('toggle-sfx', () => this._flip('sfx'));
       // Phase 14: the touch HUD's pause button — pause when playing, resume
@@ -175,6 +216,7 @@
       T.Input.setEnabled(false);
       if (T.Touch && T.Touch.setEnabled) T.Touch.setEnabled(false);
       this._fillGameOver();
+      this._recordResult(this.game);
       this._showOverlay('gameover');
       this._sfx(this.game.result === 'won' ? 'win' : 'gameover');
       this._stopMusic();
@@ -213,6 +255,195 @@
       this._blur();
      },
 
+     // ---- leaderboard screen (Phase 25) ----
+     // Overlays Home or Game Over; Back returns there (the game-over overlay
+     // is re-shown underneath, with the run's name box still live).
+    openLeaderboard(from) {
+      this._lbReturn = (from === 'gameover') ? 'gameover' : 'home';
+      if (from === 'gameover' && this.game && this.game.config) {
+        this._lbMode = this.game.config.mode;
+        }
+      this._hideOverlay('gameover');
+      this._showOverlay('leaderboard');
+      this._renderLeaderboard();
+      this._syncInput();
+      this._sfx('menu');
+      this._blur();
+     },
+
+    closeLeaderboard() {
+      this._hideOverlay('leaderboard');
+      if (this._lbReturn === 'gameover') this._showOverlay('gameover');
+      this._syncInput();
+      this._sfx('menu');
+      this._blur();
+     },
+
+    _showLeaderboardMode(mode) {
+      if (T.Leaderboard.MODES.indexOf(mode) < 0) return;
+      this._lbMode = mode;
+      this._renderLeaderboard();
+     },
+
+     // Paint the table for the current tab. Columns come from
+     // Leaderboard.COLUMNS so each mode shows its own data (Sprint leads with
+     // time, Marathon adds level, etc.). The run just finished is highlighted.
+    _renderLeaderboard() {
+      const L = T.Leaderboard;
+      const mode = this._lbMode;
+      const seg = this.els['leaderboard-seg'];
+      if (seg) {
+        for (const b of seg.children) b.classList.toggle('active', b.dataset.mode === mode);
+        }
+      const list = (this.board && this.board[mode]) || [];
+      const table = this.els['leaderboard-table'];
+      const empty = this.els['leaderboard-empty'];
+      const recordEl = this.els['leaderboard-record'];
+      if (recordEl) recordEl.innerHTML = this._recordHtml(mode);
+      if (!table) return;
+      table.innerHTML = '';
+      if (empty) empty.classList.toggle('is-hidden', list.length > 0);
+      if (table.parentNode && table.parentNode.classList) {
+        table.parentNode.classList.toggle('is-hidden', list.length === 0);
+        }
+      if (!list.length) return;
+
+      const cols = L.COLUMNS[mode];
+      const thead = document.createElement('thead');
+      const hr = document.createElement('tr');
+      this._cell(hr, 'th', '#', 'lb-col-rank');
+      this._cell(hr, 'th', 'Name', 'lb-col-name');
+      for (const c of cols) this._cell(hr, 'th', c.label, 'lb-col-' + c.key);
+      thead.appendChild(hr);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      const you = this._lastEntry;
+      list.forEach((e, i) => {
+        const tr = document.createElement('tr');
+        let cls = '';
+        if (i === 0) cls += ' is-first';
+        if (you && you.mode === mode && you.id === e.id) cls += ' is-you';
+        tr.className = cls.trim();
+        this._cell(tr, 'td', String(i + 1), 'lb-col-rank');
+        this._cell(tr, 'td', e.name, 'lb-col-name');
+        for (const c of cols) this._cell(tr, 'td', c.fmt(e), 'lb-col-' + c.key);
+        tbody.appendChild(tr);
+        });
+      table.appendChild(tbody);
+     },
+
+    _cell(row, tag, text, cls) {
+      const el = document.createElement(tag);
+      el.className = cls || '';
+      el.textContent = text;
+      row.appendChild(el);
+      return el;
+     },
+
+     // "Record: NAME — 12,345 (Hard)" for a mode, or a prompt if empty.
+    _recordHtml(mode) {
+      const L = T.Leaderboard;
+      const rec = L.record(this.board, mode);
+      if (!rec) return 'No ' + L.MODE_NAMES[mode] + ' record yet.';
+      return L.MODE_NAMES[mode] + ' record: <b>' + this._esc(rec.name) + '</b> — <b>' +
+        L.headline(mode, rec) + '</b> (' + (L.DIFF_NAMES[rec.difficulty] || '') + ')';
+     },
+
+    _esc(str) {
+      return String(str).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+     },
+
+     // ---- leaderboard data (Phase 25) ----
+    _loadLeaderboard() {
+      const L = T.Leaderboard;
+      let raw = null, name = '';
+      try {
+        raw = localStorage.getItem(LB_KEY);
+        name = localStorage.getItem(NAME_KEY) || '';
+        } catch (e) { /* no storage — the board still works for this session */ }
+      this.board = L ? L.parse(raw) : null;
+      this.playerName = name ? L.sanitizeName(name) : '';
+     },
+
+    _saveLeaderboard() {
+      try {
+        localStorage.setItem(LB_KEY, T.Leaderboard.serialize(this.board));
+        if (this.playerName) localStorage.setItem(NAME_KEY, this.playerName);
+        } catch (e) { /* ignore — the in-memory board is still current */ }
+     },
+
+     // Save the finished run immediately (so a Retry without typing never
+     // loses it), then show where it placed and what the record is. The name
+     // box is prefilled with the last name used and edits the saved row live.
+    _recordResult(g) {
+      const L = T.Leaderboard;
+      if (!L || !g || !g.config) return;
+      if (!this.board) this.board = L.create();
+      const mode = g.config.mode;
+      const prevRecord = L.record(this.board, mode);
+      const entry = L.entryFromGame(g, this.playerName || L.DEFAULT_NAME);
+      const res = L.insert(this.board, entry);
+      this.board = res.board;
+      this._lastEntry = res.rank ? { mode: mode, id: entry.id, rank: res.rank } : null;
+      if (res.rank) this._saveLeaderboard();
+
+      const rankEl = this.els['gameover-rank'];
+      const recEl = this.els['gameover-record'];
+      const wrap = this.els['gameover-name-wrap'];
+      const nameEl = this.els['gameover-name'];
+      if (rankEl) {
+        rankEl.classList.remove('is-record', 'is-miss');
+        if (res.rank === 1) {
+          rankEl.textContent = 'NEW RECORD!';
+          rankEl.classList.add('is-record');
+          } else if (res.rank) {
+          rankEl.textContent = '#' + res.rank + ' on the ' + L.MODE_NAMES[mode] + ' board';
+          } else if (mode === 'sprint' && !entry.won) {
+          rankEl.textContent = 'Finish all 40 lines to rank';
+          rankEl.classList.add('is-miss');
+          } else if (!L.qualifies(entry)) {
+          rankEl.textContent = 'Score a point to rank';
+          rankEl.classList.add('is-miss');
+          } else {
+          rankEl.textContent = 'Not in the top ' + L.MAX;
+          rankEl.classList.add('is-miss');
+          }
+        }
+      if (recEl) {
+        // Show the record that stood *before* this run when it was beaten, so
+        // the player sees what they toppled; otherwise the current record.
+        if (res.rank === 1 && prevRecord) {
+          recEl.innerHTML = 'Previous record: <b>' + this._esc(prevRecord.name) + '</b> — <b>' +
+            L.headline(mode, prevRecord) + '</b>';
+          } else if (res.rank === 1) {
+          recEl.innerHTML = 'First ' + L.MODE_NAMES[mode] + ' record on this device — <b>' +
+            L.headline(mode, entry) + '</b>';
+          } else {
+          recEl.innerHTML = this._recordHtml(mode);
+          }
+        }
+      if (wrap) wrap.classList.toggle('is-hidden', !res.rank);
+      if (nameEl) {
+        nameEl.value = this.playerName || '';
+        if (res.rank && typeof root.setTimeout === 'function') {
+          // Focus after the overlay fades in; typing goes to the box, not the game.
+          root.setTimeout(() => { try { nameEl.focus(); nameEl.select(); } catch (e) {} }, 250);
+          }
+        }
+     },
+
+     // Live rename of the row saved by _recordResult; persists on every key.
+    _renameEntry(raw) {
+      const L = T.Leaderboard;
+      if (!L || !this._lastEntry || !this.board) return;
+      const name = L.sanitizeName(raw);
+      this.playerName = name;
+      this.board = L.rename(this.board, this._lastEntry.mode, this._lastEntry.id, name);
+      this._saveLeaderboard();
+     },
+
      // ---- screen show/hide ----
     _showPage(name) {
       this._page = name;
@@ -245,9 +476,12 @@
     _syncInput() {
       const inGame = this._page === 'game';
       const settingsUp = !this.els['screen-settings'].classList.contains('hidden');
-      T.Input.setEnabled(inGame && !settingsUp);
+      const lbEl = this.els['screen-leaderboard'];
+      const lbUp = !!lbEl && !lbEl.classList.contains('hidden');
+      const on = inGame && !settingsUp && !lbUp;
+      T.Input.setEnabled(on);
       // Phase 14: the touch layer gates identically to the keyboard.
-      if (T.Touch && T.Touch.setEnabled) T.Touch.setEnabled(inGame && !settingsUp);
+      if (T.Touch && T.Touch.setEnabled) T.Touch.setEnabled(on);
      },
 
      // ---- mode select ----

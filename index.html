@@ -14,6 +14,7 @@
       <h1 class="logo">TETRIS<span class="logo-sub">IO · MLX</span></h1>
       <div class="menu-buttons">
         <button id="btn-play" class="btn btn-primary">Play</button>
+        <button id="btn-leaderboard-home" class="btn">Leaderboard</button>
         <button id="btn-settings-home" class="btn">Settings</button>
       </div>
       <p class="credits">v0.1 · vanilla JS + Canvas · no build step · double-click to play</p>
@@ -144,10 +145,40 @@
     <div class="screen-inner overlay-inner">
       <h2 class="screen-title" id="gameover-title">Game Over</h2>
       <div class="stats" id="gameover-stats"></div>
+      <!-- Phase 25: leaderboard placement + name entry. The run is saved the
+           moment the game ends; the name box edits that saved row live. -->
+      <div class="lb-rank" id="gameover-rank" aria-live="polite"></div>
+      <div class="lb-record" id="gameover-record"></div>
+      <label class="lb-name" id="gameover-name-wrap">
+        <span class="lb-name-label">Your name</span>
+        <input id="gameover-name" type="text" maxlength="12" autocomplete="off"
+               autocapitalize="characters" spellcheck="false" placeholder="PLAYER" />
+        <span class="lb-name-hint">saved as you type</span>
+      </label>
       <div class="menu-buttons">
         <button id="btn-retry" class="btn btn-primary">Retry</button>
+        <button id="btn-leaderboard-gameover" class="btn">Leaderboard</button>
         <button id="btn-menu" class="btn btn-ghost">Main Menu</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Screen: Leaderboard (Phase 25) — overlay reachable from Home and Game Over -->
+  <div id="screen-leaderboard" class="screen overlay hidden">
+    <div class="screen-inner overlay-inner lb-inner">
+      <h2 class="screen-title">Leaderboard</h2>
+      <div class="seg" id="leaderboard-seg" role="tablist" aria-label="Mode">
+        <button class="seg-btn active" data-mode="classic" role="tab">Classic</button>
+        <button class="seg-btn" data-mode="marathon" role="tab">Marathon</button>
+        <button class="seg-btn" data-mode="sprint" role="tab">Sprint</button>
+      </div>
+      <div class="lb-record" id="leaderboard-record"></div>
+      <div class="lb-table-wrap">
+        <table class="lb-table" id="leaderboard-table"></table>
+      </div>
+      <p class="lb-empty" id="leaderboard-empty">No runs recorded yet — play a game.</p>
+      <p class="lb-note">Stored in this browser only.</p>
+      <button id="btn-leaderboard-back" class="btn btn-primary">Back</button>
     </div>
   </div>
 
@@ -164,6 +195,7 @@
   <script src="js/randomizer.js"></script>
   <script src="js/scoring.js"></script>
   <script src="js/modes.js"></script>
+  <script src="js/leaderboard.js"></script>
   <script src="js/game.js"></script>
   <script src="js/fxtimeline.js"></script>
   <script src="js/render.js"></script>

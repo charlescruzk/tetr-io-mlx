@@ -111,6 +111,10 @@
     _onKeyDown(e) {
       const code = e.code;
       if (!HANDLED.has(code)) return; // not a game key — let the browser
+      // Phase 25: never swallow keys typed into a text field (the game-over
+      // name box) — Space/arrows must reach the input, not the game.
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       e.preventDefault();
       if (!this._enabled) return;
        // The OS fires keydown repeatedly while a key is held. We drive the

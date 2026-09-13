@@ -20,6 +20,8 @@ const Game = require(path.join(__dirname, '..', 'js', 'game.js'));
 const Scoring = require(path.join(__dirname, '..', 'js', 'scoring.js'));
 // Phase 8: game modes.
 const Modes = require(path.join(__dirname, '..', 'js', 'modes.js'));
+// Phase 25: per-mode top-10 leaderboard (pure).
+const Leaderboard = require(path.join(__dirname, '..', 'js', 'leaderboard.js'));
 // Phase 19: music sequencer data + timing.
 const Music = require(path.join(__dirname, '..', 'js', 'music.js'));
 // Phase 20: animated background simulation (pure, canvas-free).
@@ -549,6 +551,103 @@ test('getConfig throws on an unknown mode or difficulty', () => {
   assertThrows(() => Modes.getConfig('classic', 'medium'), 'unknown difficulty');
 });
 
+// ---------------------------------------------------------------- Phase 25
+// Leaderboard (js/leaderboard.js) — pure ranking rules, immutability, the
+// mode-specific column sets, and a validating parser for localStorage.
+
+function lbGame(mode, over) {
+  return Object.assign({ config: { mode: mode, difficulty: 'normal' },
+    score: 100, linesCleared: 5, level: 1, timeMs: 30000, result: 'lost' }, over || {});
+  }
+
+test('leaderboard: classic ranks by score, then lines, then faster time', () => {
+  const L = Leaderboard;
+  let b = L.create();
+  const a = L.entryFromGame(lbGame('classic', { score: 500, linesCleared: 10, timeMs: 40000 }), 'A', 1);
+  const c = L.entryFromGame(lbGame('classic', { score: 500, linesCleared: 12, timeMs: 50000 }), 'C', 2);
+  const d = L.entryFromGame(lbGame('classic', { score: 500, linesCleared: 12, timeMs: 45000 }), 'D', 3);
+  const e = L.entryFromGame(lbGame('classic', { score: 900 }), 'E', 4);
+  for (const x of [a, c, d, e]) b = L.insert(b, x).board;
+  assertEqual(b.classic.map((x) => x.name).join(','), 'E,D,C,A',
+    'score desc, then lines desc, then time asc');
+  assertEqual(L.record(b, 'classic').name, 'E', 'record() is the #1 row');
+  assertEqual(L.headline('classic', L.record(b, 'classic')), '900', 'classic headline is the score');
+  });
+
+test('leaderboard: marathon adds level to the tiebreak and shows a Lvl column', () => {
+  const L = Leaderboard;
+  let b = L.create();
+  const lo = L.entryFromGame(lbGame('marathon', { score: 1000, level: 3 }), 'LO', 1);
+  const hi = L.entryFromGame(lbGame('marathon', { score: 1000, level: 7 }), 'HI', 2);
+  b = L.insert(b, lo).board; b = L.insert(b, hi).board;
+  assertEqual(b.marathon[0].name, 'HI', 'same score: higher level ranks first');
+  assert(L.COLUMNS.marathon.some((c) => c.key === 'level'), 'marathon table has a level column');
+  assert(!L.COLUMNS.classic.some((c) => c.key === 'level'), 'classic table has no level column');
+  });
+
+test('leaderboard: sprint only records finished runs, fastest first, with hundredths', () => {
+  const L = Leaderboard;
+  let b = L.create();
+  const dnf = L.entryFromGame(lbGame('sprint', { linesCleared: 30, timeMs: 20000, result: 'lost' }), 'DNF', 1);
+  assertEqual(L.rank(b, dnf), null, 'an unfinished sprint never ranks');
+  assertEqual(L.insert(b, dnf).board, b, 'a non-qualifying insert returns the same board');
+  const slow = L.entryFromGame(lbGame('sprint', { linesCleared: 40, timeMs: 95450, result: 'won' }), 'SLOW', 2);
+  const fast = L.entryFromGame(lbGame('sprint', { linesCleared: 40, timeMs: 83456, result: 'won' }), 'FAST', 3);
+  b = L.insert(b, slow).board;
+  const res = L.insert(b, fast);
+  assertEqual(res.rank, 1, 'the faster time takes #1');
+  b = res.board;
+  assertEqual(L.COLUMNS.sprint[0].key, 'timeMs', 'sprint leads with time');
+  assertEqual(L.COLUMNS.sprint[0].fmt(fast), '1:23.45', 'sprint time shows hundredths');
+  assertEqual(L.headline('sprint', L.record(b, 'sprint')), '1:23.45', 'sprint headline is the time');
+  });
+
+test('leaderboard: top 10 cap, immutability, rename by id, name sanitizing', () => {
+  const L = Leaderboard;
+  let b = L.create();
+  for (let i = 1; i <= 12; i++) {
+    b = L.insert(b, L.entryFromGame(lbGame('classic', { score: i * 100 }), 'P' + i, i)).board;
+    }
+  assertEqual(b.classic.length, L.MAX, 'never more than MAX rows');
+  assertEqual(b.classic[0].score, 1200, 'highest kept at the top');
+  assertEqual(b.classic[9].score, 300, 'the two lowest fell off');
+  const weak = L.entryFromGame(lbGame('classic', { score: 50 }), 'W', 99);
+  assertEqual(L.rank(b, weak), null, 'below the cut-off does not rank');
+  const before = JSON.stringify(b);
+  const res = L.insert(b, L.entryFromGame(lbGame('classic', { score: 650 }), 'MID', 100));
+  assertEqual(res.rank, 7, 'ranks are 1-based positions (1200..700 sit above 650)');
+  assertEqual(JSON.stringify(b), before, 'insert() does not mutate the input board');
+  const id = res.board.classic[6].id;
+  const renamed = L.rename(res.board, 'classic', id, '  ch\u0007arles is a very long name ');
+  assertEqual(renamed.classic[6].name, 'charles is a', 'rename trims, strips controls, caps at 12');
+  assertEqual(res.board.classic[6].name, 'MID', 'rename() does not mutate the input board');
+  assertEqual(L.sanitizeName('   '), L.DEFAULT_NAME, 'blank names fall back to the default');
+  assertEqual(L.formatScore(1234567), '1,234,567', 'scores get thousands separators');
+  });
+
+test('leaderboard: parse() validates and survives garbage; serialize round-trips', () => {
+  const L = Leaderboard;
+  let b = L.create();
+  b = L.insert(b, L.entryFromGame(lbGame('classic', { score: 300 }), 'OK', 1)).board;
+  b = L.insert(b, L.entryFromGame(lbGame('sprint', { linesCleared: 40, timeMs: 70000, result: 'won' }), 'S', 2)).board;
+  const back = L.parse(L.serialize(b));
+  assertEqual(JSON.stringify(back), JSON.stringify(b), 'serialize → parse is lossless');
+  for (const junk of [null, '', 'not json', '42', '[]', '{"classic":"nope"}', '{"classic":[1,null,"x"]}']) {
+    const p = L.parse(junk);
+    assertEqual(p.classic.length + p.marathon.length + p.sprint.length, 0, 'garbage → empty board: ' + junk);
+    }
+  // Malformed rows are dropped or coerced, and the result is re-sorted and capped.
+  const messy = { classic: [
+    { name: 'LOW', score: 10 }, { name: 'HIGH', score: 999, lines: 'x', timeMs: -5 },
+    { name: 'ZERO', score: 0 }, { score: 5, name: 'NONAME' },
+    ] };
+  const p = L.parse(JSON.stringify(messy));
+  assertEqual(p.classic.map((e) => e.name).join(','), 'HIGH,LOW,NONAME', 'sorted; zero-score row dropped');
+  assertEqual(p.classic[0].lines, 0, 'non-numeric lines coerced to 0');
+  assertEqual(p.classic[0].timeMs, 0, 'negative time clamped');
+  assert(p.classic[0].id, 'rows without an id get one');
+  });
+
 // ---------------------------------------------------------------- Phase 19
 // Music sequencer (js/music.js) — pure data + timing. The audio layer in
 // js/audio.js consumes this; the tests prove the patterns, scheduling, and
@@ -1012,6 +1111,11 @@ const UI_IDS = [
   'btn-play', 'btn-settings-home', 'btn-back-home', 'btn-resume',
   'btn-restart-pause', 'btn-settings-pause', 'btn-quit-pause',
   'btn-settings-back', 'btn-retry', 'btn-menu',
+  // Phase 25: leaderboard screen + game-over name entry.
+  'screen-leaderboard', 'btn-leaderboard-home', 'btn-leaderboard-gameover',
+  'btn-leaderboard-back', 'leaderboard-seg', 'leaderboard-record',
+  'leaderboard-table', 'leaderboard-empty', 'gameover-rank', 'gameover-record',
+  'gameover-name-wrap', 'gameover-name',
   ];
 
 function installDomStubs() {
@@ -1022,6 +1126,13 @@ function installDomStubs() {
   byId['difficulty-seg'].children = ['easy', 'normal', 'hard'].map((d) => {
     const b = makeEl('diff-' + d);
     b.dataset.difficulty = d;
+    return b;
+    });
+
+  // Phase 25: the leaderboard's mode tabs, like index.html's markup.
+  byId['leaderboard-seg'].children = ['classic', 'marathon', 'sprint'].map((m) => {
+    const b = makeEl('lbtab-' + m);
+    b.dataset.mode = m;
     return b;
     });
 
@@ -1112,6 +1223,7 @@ global.Tetris.Render = {
 // game.js exports via module.exports in Node and only attaches
 // Tetris.Game in the browser — bridge it so the UI layer can start games.
 global.Tetris.Game = Game;
+global.Tetris.Leaderboard = Leaderboard;
 
 const dom = installDomStubs();
 // The ui.js/main.js UMD wrappers attach to `window` when one exists, so the
@@ -1165,6 +1277,134 @@ test('one rAF frame runs cleanly with a live game', () => {
   dom.runFrame(0);
   dom.runFrame(500);
   dom.runFrame(1600);
+  });
+
+
+// ---------------------------------------------------------------- Phase 25
+// Game over → leaderboard integration: the run is saved the instant the game
+// ends (no name typed yet), the name box edits that saved row live and
+// persists on every keystroke, non-qualifying runs stay off the board, and
+// the leaderboard overlay is reachable from Home and Game Over in both
+// directions with input gated off while it's up.
+
+function installFakeStorage() {
+  const store = {};
+  const calls = [];
+  global.localStorage = {
+    getItem: (k) => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); calls.push(k); },
+    removeItem: (k) => { delete store[k]; },
+    };
+  return { store, calls };
+  }
+
+test('leaderboard UI: a finished game is saved immediately and renamed live', () => {
+  const ls = installFakeStorage();
+  UI._loadLeaderboard();
+  assertEqual(UI.board.classic.length, 0, 'fresh storage → empty board');
+  dom.click(dom.byId['btn-menu']);
+  dom.click(dom.byId['btn-play']);
+  dom.click(dom.modeCards[0]); // classic
+  const g = UI.game;
+  g.score = 4200; g.linesCleared = 12; g.timeMs = 61000;
+  g.state = 'over'; g.result = 'lost';
+  UI.endGame();
+  assertEqual(UI.board.classic.length, 1, 'the run is on the board before any name is typed');
+  assertEqual(UI.board.classic[0].name, Leaderboard.DEFAULT_NAME, 'default name until typed');
+  assert(ls.calls.includes('tetrio-leaderboard'), 'saved to localStorage at game end');
+  assertEqual(dom.byId['gameover-rank'].textContent, 'NEW RECORD!', 'first run is the record');
+  assert(dom.byId['gameover-rank'].classList.contains('is-record'), 'record styling applied');
+  assert(!dom.byId['gameover-name-wrap'].classList.contains('is-hidden'), 'name box shown for a ranked run');
+  // Type a name: the saved row is renamed and persisted on every input event.
+  const nameEl = dom.byId['gameover-name'];
+  nameEl.value = 'charles';
+  const n = ls.calls.length;
+  for (const fn of nameEl.listeners.input) fn({});
+  assertEqual(UI.board.classic[0].name, 'charles', 'typing renames the saved row');
+  assert(ls.calls.length > n, 'each keystroke persists');
+  assertEqual(ls.store['tetrio-player-name'], 'charles', 'the name is remembered for next time');
+  assertEqual(Leaderboard.parse(ls.store['tetrio-leaderboard']).classic[0].name, 'charles',
+    'what is in storage matches the in-memory board');
+  });
+
+test('leaderboard UI: a second, lower run ranks #2 and shows the standing record', () => {
+  dom.click(dom.byId['btn-retry']);
+  const g = UI.game;
+  g.score = 1000; g.linesCleared = 3; g.timeMs = 20000;
+  g.state = 'over'; g.result = 'lost';
+  UI.endGame();
+  assertEqual(UI.board.classic.length, 2, 'two rows now');
+  assertEqual(dom.byId['gameover-rank'].textContent, '#2 on the Classic board');
+  assert(dom.byId['gameover-record'].innerHTML.includes('charles') &&
+         dom.byId['gameover-record'].innerHTML.includes('4,200'),
+    'the record holder and their score are shown');
+  assertEqual(UI.board.classic[1].name, 'charles', 'the remembered name prefills the new row');
+  });
+
+test('leaderboard UI: an unfinished sprint is not recorded and says why', () => {
+  dom.click(dom.byId['btn-menu']);
+  dom.click(dom.byId['btn-play']);
+  dom.click(dom.modeCards[2]); // sprint
+  const g = UI.game;
+  g.score = 800; g.linesCleared = 25; g.timeMs = 30000;
+  g.state = 'over'; g.result = 'lost';
+  UI.endGame();
+  assertEqual(UI.board.sprint.length, 0, 'a top-out in sprint never ranks');
+  assertEqual(dom.byId['gameover-rank'].textContent, 'Finish all 40 lines to rank');
+  assert(dom.byId['gameover-name-wrap'].classList.contains('is-hidden'), 'no name box without a rank');
+  });
+
+test('leaderboard UI: overlay opens from Game Over and Home, and Back returns there', () => {
+  // From game over (sprint tab preselected since that game was a sprint).
+  dom.click(dom.byId['btn-leaderboard-gameover']);
+  assert(!dom.byId['screen-leaderboard'].classList.contains('hidden'), 'leaderboard overlay up');
+  assert(dom.byId['screen-gameover'].classList.contains('hidden'), 'game over hidden underneath');
+  assertEqual(UI._lbMode, 'sprint', 'tab follows the game just played');
+  dom.click(dom.byId['btn-leaderboard-back']);
+  assert(dom.byId['screen-leaderboard'].classList.contains('hidden'), 'closed');
+  assert(!dom.byId['screen-gameover'].classList.contains('hidden'), 'Back returns to Game Over');
+  // From home: table renders the classic rows with a mode-specific header.
+  dom.click(dom.byId['btn-menu']);
+  dom.click(dom.byId['btn-leaderboard-home']);
+  dom.click(dom.byId['leaderboard-seg'].children[0]); // classic tab
+  const table = dom.byId['leaderboard-table'];
+  const rows = table.children[1].children; // tbody rows
+  assertEqual(rows.length, 2, 'both classic runs are listed');
+  const header = table.children[0].children[0].children.map((c) => c.textContent).join('|');
+  assertEqual(header, '#|Name|Score|Lines|Time|Diff', 'classic columns');
+  assertEqual(rows[0].children[2].textContent, '4,200', 'the record leads');
+  dom.click(dom.byId['leaderboard-seg'].children[1]); // marathon tab (empty)
+  assertEqual(UI._lbMode, 'marathon', 'tab switch');
+  assert(!dom.byId['leaderboard-empty'].classList.contains('is-hidden'), 'empty tab shows the prompt');
+  assertEqual(dom.byId['leaderboard-record'].innerHTML, 'No Marathon record yet.');
+  dom.click(dom.byId['btn-leaderboard-back']);
+  assertEqual(UI._page, 'home', 'Back from a Home-opened leaderboard lands on Home');
+  });
+
+test('leaderboard UI: input is gated off while the overlay is up, and a storage event reloads', () => {
+  const seen = [];
+  const realSet = global.Tetris.Input.setEnabled;
+  global.Tetris.Input.setEnabled = (on) => seen.push(on);
+  dom.click(dom.byId['btn-play']);
+  dom.click(dom.modeCards[0]);
+  const g = UI.game; g.score = 10; g.state = 'over'; g.result = 'lost';
+  UI.endGame();
+  seen.length = 0;
+  dom.click(dom.byId['btn-leaderboard-gameover']);
+  assertEqual(seen[seen.length - 1], false, 'input off with the leaderboard up');
+  dom.click(dom.byId['btn-leaderboard-back']);
+  global.Tetris.Input.setEnabled = realSet;
+  // Another tab wrote a new board: the storage listener reloads it.
+  global.localStorage.setItem('tetrio-leaderboard', Leaderboard.serialize(
+    Leaderboard.insert(Leaderboard.create(),
+      Leaderboard.entryFromGame(lbGame('marathon', { score: 777 }), 'OTHERTAB', 5)).board));
+  UI._loadLeaderboard();
+  assertEqual(UI.board.marathon[0].name, 'OTHERTAB', 'reload picks up the other tab\'s write');
+  delete global.localStorage;
+  // Leave a live classic game behind: the Phase 14 touch tests below expect one.
+  dom.click(dom.byId['btn-menu']);
+  dom.click(dom.byId['btn-play']);
+  dom.click(dom.modeCards[0]);
   });
 
 // ---------------------------------------------------------------- Phase 14
