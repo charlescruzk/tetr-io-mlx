@@ -22,6 +22,9 @@ const Scoring = require(path.join(__dirname, '..', 'js', 'scoring.js'));
 const Modes = require(path.join(__dirname, '..', 'js', 'modes.js'));
 // Phase 25: per-mode top-10 leaderboard (pure).
 const Leaderboard = require(path.join(__dirname, '..', 'js', 'leaderboard.js'));
+// Phase 27: touch-layout model + local profiles (pure).
+const Layout = require(path.join(__dirname, '..', 'js', 'layout.js'));
+const Profiles = require(path.join(__dirname, '..', 'js', 'profiles.js'));
 // Phase 19: music sequencer data + timing.
 const Music = require(path.join(__dirname, '..', 'js', 'music.js'));
 // Phase 20: animated background simulation (pure, canvas-free).
@@ -702,6 +705,102 @@ test('leaderboard: parse() validates and survives garbage; serialize round-trips
   assert(p.classic[0].id, 'rows without an id get one');
   });
 
+// ---------------------------------------------------------------- Phase 27
+// Touch-layout model (js/layout.js) + local profiles (js/profiles.js).
+
+test('layout: presets are valid, distinct, and the dropTop preset matches the owner\'s ask', () => {
+  const L = Layout;
+  for (const k of Object.keys(L.PRESETS)) assert(L.isValid(L.PRESETS[k].cells), k + ' preset is valid');
+  const d = L.create('dropTop');
+  assert(d.hard.r < d.left.r && d.hard.c === d.left.c, 'hard drop sits above the arrows');
+  assertEqual(d.ccw.c, d.cw.c, 'both rotations share a column');
+  assertEqual(d.hold.c, L.COLS - 1, 'hold is on the far right');
+  assertEqual(L.presetOf(d), 'dropTop', 'presetOf recognises it');
+  assertEqual(L.presetOf(L.create()), 'default');
+  assertEqual(L.presetOf(L.mirror(L.create())), 'mirrored', 'mirror(default) is the Mirrored preset');
+  assertEqual(L.presetOf(L.mirror(L.mirror(L.create()))), 'default', 'mirror is an involution');
+  });
+
+test('layout: move places, swaps, packs displaced pairs, and refuses the split', () => {
+  const L = Layout;
+  const base = L.create();
+  const up = L.move(base, 'hard', 0, 0);
+  assert(up && up.hard.c === 0 && up.hard.r === 0, 'move into an empty cell');
+  assertEqual(base.hard.c, 4, 'move() does not mutate the input');
+  const swapped = L.move(base, 'left', 3, 1);
+  assert(swapped && swapped.left.c === 3 && swapped.hold.c === 0 && swapped.hold.r === 1,
+    'moving onto a button swaps it into the vacated cell');
+  const packed = L.move(base, 'soft', 3, 1); // wide bar onto hold + ccw
+  assert(packed && packed.soft.c === 3 && packed.soft.w === 2, 'a wide bar can land on two singles');
+  assertEqual([packed.hold.c, packed.ccw.c].join(','), '0,1', 'the two singles pack into the bar\'s old cells, left-to-right');
+  assertEqual(L.move(base, 'soft', 2, 0), null, 'a wide button cannot straddle the split');
+  assertEqual(L.move(base, 'left', 6, 0), null, 'out of bounds');
+  assertEqual(L.move(base, 'left', 0, 3), null, 'row out of bounds');
+  assert(L.isValid(up) && L.isValid(swapped) && L.isValid(packed), 'every result is a valid layout');
+  });
+
+test('layout: setWide grows (or fails cleanly), clusters trim to bounding boxes, parse validates', () => {
+  const L = Layout;
+  const base = L.create();
+  const wideHold = L.setWide(base, 'hold', true);
+  assertEqual(wideHold, null, 'hold cannot widen into ccw');
+  const upHard = L.move(base, 'hard', 3, 0);
+  const wideHard = L.setWide(upHard, 'hard', true);
+  assert(wideHard && wideHard.hard.w === 2, 'hard widens on an empty row');
+  const narrow = L.setWide(base, 'soft', false);
+  assert(narrow && narrow.soft.w === 1, 'narrowing always works');
+  const cl = L.clusters(L.create('dropTop'));
+  assertEqual(cl.left.cols + 'x' + cl.left.rows, '2x3', 'left side: 2 columns, 3 rows');
+  assertEqual(cl.right.cols + 'x' + cl.right.rows, '3x2', 'right side trims the unused top row');
+  assert(cl.right.items.every((it) => it.r <= 1), 'right-side rows are local (start at 0)');
+  const everyLeft = L.ACTIONS.reduce((acc, a, i) => { acc[a] = { c: i % 3, r: Math.floor(i / 3), w: 1 }; return acc; }, {});
+  assertEqual(L.clusters(everyLeft).right, null, 'an empty side renders nothing');
+  assertEqual(L.presetOf(L.parse('garbage')), 'default', 'garbage → default');
+  assertEqual(L.presetOf(L.parse({ left: { c: 0, r: 0, w: 1 } })), 'default', 'missing actions → default');
+  const overlap = L.clone(base); overlap.hold = { c: 0, r: 1, w: 1 };
+  assertEqual(L.presetOf(L.parse(JSON.stringify(overlap))), 'default', 'overlapping → default');
+  assertEqual(L.presetOf(L.parse(L.serialize(L.create('mirrored')))), 'mirrored', 'round-trip');
+  assertEqual(L.occupant(base, 1, 2), 'soft', 'occupant covers the wide bar\'s second cell');
+  assertEqual(L.occupant(base, 0, 0), null);
+  });
+
+test('profiles: add/switch/remove/update keep preferences per player; parse survives garbage', () => {
+  const P = Profiles;
+  let st = P.create('Charles', { settings: { music: false, sfx: true }, lbName: 'CHZ' });
+  assertEqual(st.active, 'Charles');
+  assertEqual(P.active(st).settings.music, false, 'seeded settings land on the first profile');
+  assertEqual(P.active(st).lbName, 'CHZ');
+  assertEqual(P.add(st, '   ').error, 'empty');
+  assertEqual(P.add(st, 'charles').error, null, 'names are case-sensitive keys');
+  assertEqual(P.add(st, 'Charles').error, 'exists');
+  const orig = st;
+  const before = JSON.stringify(orig);
+  st = P.add(st, 'Ana').store;
+  assertEqual(st.active, 'Ana', 'a new profile becomes active');
+  assertEqual(P.active(st).settings.music, true, 'the new profile starts from defaults, not the other player\'s');
+  st = P.update(st, { layout: Layout.create('dropTop'), settings: { sfx: false } });
+  assertEqual(Layout.presetOf(P.active(st).layout), 'dropTop');
+  st = P.setActive(st, 'Charles');
+  assertEqual(Layout.presetOf(P.active(st).layout), 'default', 'Charles keeps the default layout');
+  assertEqual(P.active(st).settings.sfx, true, 'Charles keeps sfx on');
+  assertEqual(JSON.stringify(orig), before, 'the original store was never mutated');
+  const rt = P.parse(P.serialize(st));
+  assertEqual(Layout.presetOf(rt.list.Ana.layout), 'dropTop', 'layouts round-trip through storage');
+  assertEqual(P.remove(st, 'Nobody'), st, 'removing an unknown name is a no-op');
+  st = P.remove(st, 'Charles');
+  assertEqual(st.active, 'Ana', 'removing the active profile activates another');
+  assertEqual(P.remove(st, 'Ana'), st, 'the last profile cannot be removed');
+  for (const junk of [null, '', 'nope', '[]', '{"list":5}', '{"list":{}}', '{"list":{"":{}}}']) {
+    const p = P.parse(junk, { settings: { music: false } });
+    assertEqual(P.names(p).length, 1, 'garbage → one seeded profile: ' + junk);
+    assertEqual(P.active(p).settings.music, false, 'seed applied: ' + junk);
+    }
+  const half = P.parse('{"active":"Zed","list":{"Ana":{"layout":"bad"},"Bo":null}}');
+  assertEqual(P.names(half).join(','), 'Ana,Bo', 'malformed profiles are coerced, not dropped');
+  assertEqual(half.active, 'Ana', 'unknown active → first profile');
+  assertEqual(Layout.presetOf(half.list.Ana.layout), 'default', 'a bad layout falls back');
+  });
+
 // ---------------------------------------------------------------- Phase 19
 // Music sequencer (js/music.js) — pure data + timing. The audio layer in
 // js/audio.js consumes this; the tests prove the patterns, scheduling, and
@@ -1142,9 +1241,13 @@ function makeEl(id) {
     className: '',
     textContent: '',
     innerHTML: '',
+    value: '',
+    style: {},
     classList: makeClassList(id === 'screen-home' ? [] : ['hidden']),
     blur: () => {},
+    focus: () => {},
     appendChild: (child) => { el.children.push(child); return child; },
+    replaceChildren: () => { el.children = []; },
     addEventListener: (type, fn) => {
       (el.listeners[type] = el.listeners[type] || []).push(fn);
       },
@@ -1170,6 +1273,11 @@ const UI_IDS = [
   'btn-leaderboard-back', 'leaderboard-seg', 'leaderboard-record',
   'leaderboard-table', 'leaderboard-empty', 'gameover-rank', 'gameover-record',
   'gameover-name-wrap', 'gameover-name',
+  // Phase 27: profiles + touch-layout editor.
+  'screen-profile', 'btn-profile', 'btn-profile-back', 'btn-layout-mirror',
+  'btn-layout-reset', 'profile-chip-name', 'profile-list', 'profile-new-name',
+  'profile-error', 'profile-add-form', 'layout-editor', 'layout-presets',
+  'layout-hint', 'layout-profile-name',
   ];
 
 function installDomStubs() {
@@ -1180,6 +1288,13 @@ function installDomStubs() {
   byId['difficulty-seg'].children = ['easy', 'normal', 'hard'].map((d) => {
     const b = makeEl('diff-' + d);
     b.dataset.difficulty = d;
+    return b;
+    });
+
+  // Phase 27: the layout editor's preset tabs, like index.html's markup.
+  byId['layout-presets'].children = ['default', 'dropTop', 'mirrored'].map((k) => {
+    const b = makeEl('preset-' + k);
+    b.dataset.preset = k;
     return b;
     });
 
@@ -1278,6 +1393,8 @@ global.Tetris.Render = {
 // Tetris.Game in the browser — bridge it so the UI layer can start games.
 global.Tetris.Game = Game;
 global.Tetris.Leaderboard = Leaderboard;
+global.Tetris.Layout = Layout;
+global.Tetris.Profiles = Profiles;
 
 const dom = installDomStubs();
 // The ui.js/main.js UMD wrappers attach to `window` when one exists, so the
@@ -1466,8 +1583,16 @@ test('leaderboard UI: input is gated off while the overlay is up, and a storage 
 // the same DOM stubs. Real touch-event semantics stay a human check.
 
 const Touch = global.Tetris.Touch;
-const tbtn = (action) => dom.byId['touch-controls'].children
-  .find((b) => b.dataset.action === action);
+// Phase 27: touch.js now renders the buttons inside per-side cluster
+// elements, so search the container recursively.
+const tbtn = (action) => {
+  const walk = (el) => {
+    if (el.dataset && el.dataset.action === action) return el;
+    for (const ch of (el.children || [])) { const hit = walk(ch); if (hit) return hit; }
+    return null;
+    };
+  return walk(dom.byId['touch-controls']);
+  };
 
 test('touch: buttons are bound and enabled once a game is live', () => {
   for (const a of ['left', 'right', 'soft', 'cw', 'ccw', 'hard', 'hold']) {
@@ -1517,6 +1642,113 @@ test('touch: presses are no-ops when the layer is disabled', () => {
   dom.touchEnd(tbtn('cw'));
   assertEqual(g.current.rotation, rotation, 'a disabled press must do nothing');
   UI._syncInput(); // restore enabled state for any later tests
+  });
+
+// ---------------------------------------------------------------- Phase 27
+// Profiles + layout editor integration: switching players swaps the live
+// touch layout and audio settings; the editor's tap flow edits the active
+// profile and re-renders the touch buttons immediately; persistence goes
+// through localStorage under the profile store.
+
+test('profiles UI: a new player gets their own layout/settings and the touch buttons re-render', () => {
+  const ls = installFakeStorage();
+  // Fresh store seeded from the current (legacy) settings.
+  UI.settings = { music: false, sfx: true };
+  UI.playerName = '';
+  UI._loadProfiles();
+  assertEqual(UI.profiles.active, Leaderboard.DEFAULT_NAME, 'first profile takes the default name');
+  assertEqual(UI.settings.music, false, 'legacy settings seed the first profile');
+  assertEqual(Layout.presetOf(UI.layout), 'default');
+  const Touch = global.Tetris.Touch;
+  assert(Touch._controls, 'touch.js rendered the default layout at boot');
+  assert(tbtn('hard') && tbtn('hold'), 'buttons exist after a render');
+  // Editor: apply the dropTop preset for this player.
+  dom.click(dom.byId['btn-settings-home']);
+  dom.click(dom.byId['layout-presets'].children[1]); // dropTop
+  assertEqual(Layout.presetOf(UI.layout), 'dropTop', 'preset applied');
+  assertEqual(Layout.presetOf(Profiles.active(UI.profiles).layout), 'dropTop', 'saved on the profile');
+  assert(ls.calls.includes('tetrio-profiles'), 'persisted');
+  assertEqual(tbtn('hard').style.gridRow, '1', 'live touch buttons re-rendered: Drop is on the top row');
+  assertEqual(tbtn('hard').style.gridColumn, '1 / span 2', 'Drop is wide over the arrows');
+  assertEqual(tbtn('hold').style.gridColumn, '3 / span 1', 'Hold is the far-right column of its cluster');
+  const rightCluster = dom.byId['touch-controls'].children[1];
+  assertEqual(rightCluster.style.gridTemplateColumns, 'repeat(3, minmax(0, 1fr))', 'right cluster is 3 wide');
+  dom.click(dom.byId['btn-settings-back']);
+  // Add a second player: they start on the default layout.
+  dom.click(dom.byId['btn-profile']);
+  dom.byId['profile-new-name'].value = 'Ana';
+  for (const fn of dom.byId['profile-add-form'].listeners.submit) fn({ preventDefault: () => {} });
+  assertEqual(UI.profiles.active, 'Ana', 'the new player is active');
+  assertEqual(Layout.presetOf(UI.layout), 'default', 'Ana starts on the default layout');
+  assertEqual(UI.settings.music, true, 'Ana starts with default audio');
+  assertEqual(tbtn('hard').style.gridRow, '2', 'touch buttons re-rendered for Ana');
+  assertEqual(dom.byId['profile-chip-name'].textContent, 'Ana', 'Home chip shows who is playing');
+  // Switch back: the first player's dropTop layout and muted music return.
+  const pick = dom.byId['profile-list'].children[0].children[0];
+  assertEqual(pick.dataset.profile, Leaderboard.DEFAULT_NAME);
+  dom.click(pick);
+  assertEqual(UI.profiles.active, Leaderboard.DEFAULT_NAME);
+  assertEqual(Layout.presetOf(UI.layout), 'dropTop', 'their layout came back');
+  assertEqual(UI.settings.music, false, 'their audio setting came back');
+  assertEqual(tbtn('hard').style.gridRow, '1', 'touch buttons follow the profile');
+  // Reload from storage: everything survives.
+  const stored = Profiles.parse(ls.store['tetrio-profiles']);
+  assertEqual(Profiles.names(stored).join(','), Leaderboard.DEFAULT_NAME + ',Ana');
+  assertEqual(Layout.presetOf(stored.list.Ana.layout), 'default');
+  assertEqual(Layout.presetOf(stored.list[Leaderboard.DEFAULT_NAME].layout), 'dropTop');
+  // Removing takes two taps: the first arms, the second removes.
+  const anaRow = dom.byId['profile-list'].children[1];
+  dom.click(anaRow.children[1]);
+  assertEqual(UI.profiles.list.Ana && true, true, 'first tap only arms');
+  assertEqual(dom.byId['profile-list'].children[1].children[1].textContent, 'Sure?');
+  dom.click(dom.byId['profile-list'].children[1].children[1]);
+  assertEqual(UI.profiles.list.Ana, undefined, 'second tap removes');
+  assertEqual(dom.byId['profile-list'].children.length, 1, 'list re-rendered');
+  dom.click(dom.byId['btn-profile-back']);
+  delete global.localStorage;
+  });
+
+test('layout editor: tap a button, tap a cell → moved; tap it twice → wide; bad drops explain why', () => {
+  installFakeStorage();
+  UI._setLayout(Layout.create(), '');
+  dom.click(dom.byId['btn-settings-home']);
+  const editor = dom.byId['layout-editor'];
+  const findBtn = (a) => editor.children.find((el) => el.dataset.action === a);
+  const findCell = (c, r) => editor.children.find((el) => el.dataset.c === String(c) && el.dataset.r === String(r));
+  assertEqual(editor.children.length, 18 + 7, '18 target cells + 7 buttons');
+  dom.click(findBtn('hard'));
+  assertEqual(UI._laySel, 'hard', 'picked up');
+  assert(findBtn('hard').className.includes('is-selected'), 'selected styling');
+  dom.click(findCell(0, 0));
+  assertEqual(UI.layout.hard.c + ',' + UI.layout.hard.r, '0,0', 'dropped on the empty cell');
+  assertEqual(UI._laySel, null, 'dropped → nothing selected');
+  assertEqual(tbtn('hard').style.gridRow, '1', 'live controls updated');
+  dom.click(findBtn('hard'));
+  dom.click(findBtn('hard'));
+  assertEqual(UI.layout.hard.w, 2, 'second tap widens');
+  dom.click(findBtn('ccw'));
+  dom.click(findBtn('cw')); // tap another button → swap the two
+  assertEqual(dom.byId['layout-hint'].textContent, 'Swapped.');
+  assertEqual(UI.layout.ccw.r + ',' + UI.layout.cw.r, '2,1', 'ccw and cw traded places');
+  assertEqual(tbtn('cw').style.gridRow, '1', 'live controls reflect the swap');
+  dom.click(findBtn('hold'));
+  dom.click(findCell(1, 0)); // covered by the wide Drop bar: the bar can't fit in Hold's old cell
+  assert(dom.byId['layout-hint'].classList.contains('is-error'), 'an impossible swap is refused with a hint');
+  assertEqual(UI.layout.hold.c + ',' + UI.layout.hold.r, '3,1', 'hold did not move');
+  assertEqual(UI._laySel, 'hold', 'still picked up so another cell can be tried');
+  dom.click(findCell(2, 0));
+  assertEqual(UI.layout.hold.c + ',' + UI.layout.hold.r, '2,0', 'a legal cell works');
+  dom.click(findBtn('soft'));
+  dom.click(findCell(2, 2)); // wide soft bar would straddle the split
+  assert(dom.byId['layout-hint'].classList.contains('is-error'), 'a bad drop shows an error hint');
+  assertEqual(UI.layout.soft.c, 0, 'layout unchanged after a bad drop');
+  dom.click(dom.byId['btn-layout-reset']);
+  assertEqual(Layout.presetOf(UI.layout), 'default', 'reset');
+  dom.click(dom.byId['btn-layout-mirror']);
+  assertEqual(Layout.presetOf(UI.layout), 'mirrored', 'mirror button');
+  assert(dom.byId['layout-presets'].children[2].classList.contains('active'), 'preset tab highlights');
+  dom.click(dom.byId['btn-settings-back']);
+  delete global.localStorage;
   });
 
 // ---------------------------------------------------------------- Phase 15

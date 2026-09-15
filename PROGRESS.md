@@ -5,7 +5,33 @@ Read this file first, every session. Update it at the end of every phase
 off" across sessions — don't rely on memory of a prior session, rely on
 this file.
 
-## Status: Phase 26 done — leaderboard + wall-rotation fix, published to GitHub
+## Status: Phase 27 done — per-player touch layouts + local profiles, published
+
+Phase 27 (2026-09-14): customizable touch-button layout, per player. Two new
+pure modules: `js/layout.js` — the 6×3 layout grid (left 3 columns = left
+thumb, right 3 = right thumb), presets (Default / Drop on top / Mirrored),
+`move` (with swap + displaced-pair packing), `setWide`, `mirror`, `clusters`
+(per-side bounding boxes so unused rows cost no height) and a validating
+`parse`; `js/profiles.js` — local profiles on the device: each keeps its own
+touch layout, audio settings and leaderboard name; the leaderboard itself
+stays shared. Storage is `localStorage` (`tetrio-profiles`), chosen over
+cookies deliberately (cookies are a server mechanism, 4KB, sent with every
+request; neither follows a user across devices without a backend, which the
+spec forbids). `js/touch.js` now renders its buttons from the layout
+(`Touch.render`) instead of the static markup (kept as the no-JS fallback
+and for the structure test). UI: "Playing as" chip on Home → Profiles
+overlay (switch / add / two-tap remove); Settings gained a tap-to-place
+layout editor (tap a button, tap a cell; tap it again for wide; presets,
+Mirror, Reset) that saves to the active profile and re-renders the live
+controls immediately. Upgrading from the pre-profile build seeds the first
+profile from the old settings + leaderboard name. Verified on an emulated
+phone (390×844 + 844×390, touch): the "Drop on top" layout renders Drop
+above the arrows, both rotations in one column, Hold far right; a generated
+Drop button fires a real hard drop; switching to a second player swaps the
+layout live; everything survives reload; no overflow; no console errors.
+Tests 107/107 (4 pure sections + 2 UI integration tests).
+
+Previous status (Phase 26):
 
 Phase 25 (2026-09-13): per-mode top-10 leaderboard. New pure module
 `js/leaderboard.js` (dual-export, Node-tested) owns the rules: Classic ranks
@@ -534,7 +560,20 @@ optional `onEvent` hook that audio.js installs, a no-op in Node tests so the
       for every JLSTZ piece in state 3 at the right wall, an exhaustive
       empty-board rotation sweep, and a blocked-kicks fallback test.
 
+- [x] Phase 27 — Per-player touch layouts + profiles. `js/layout.js`,
+      `js/profiles.js` (pure, tested), `js/touch.js` render-from-layout,
+      ui.js profiles screen + layout editor, index.html/style.css. Verified
+      on emulated phone in both orientations; see visual-check note.
+
 ## Needs human visual check
+
+**Phase 27 (touch layout editor + profiles) — emulated touch only.** On a
+real phone: Settings → Touch controls: tap a button then a cell, confirm the
+in-game buttons move immediately (no reload) and the hint text reads right;
+try a 3-row layout in landscape on a short phone (≈570px wide) and confirm
+the clusters don't overlap the board; switch players from the Home chip and
+confirm both the layout and the music/SFX toggles follow the player.
+
 
 **Phase 25 (leaderboard) — seen in headless screenshots only.** Finish a game:
 the name box should take focus by itself after the overlay fades in; typing

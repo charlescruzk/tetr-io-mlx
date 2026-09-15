@@ -28,6 +28,14 @@
   // Actions that repeat while held (mirrors input.js's DAS_KEYS).
   const REPEAT = new Set(['left', 'right', 'soft']);
 
+  // Style helpers that tolerate the test stub's bare `style` object.
+  function setStyle(el, prop, value) {
+    if (el.style) el.style[prop] = value;
+  }
+  function setVar(el, name, value) {
+    if (el.style && el.style.setProperty) el.style.setProperty(name, value);
+  }
+
   const Touch = {
     DAS: DAS,
     ARR: ARR,
@@ -36,32 +44,86 @@
     _repeat: {},       // action -> { nextAt } while a button is held
     _raf: null,
     _loopFn: null,
+    _controls: null,
+    _buttons: null,
 
-    // Cache the control elements and attach their listeners. Called once
-    // from main.js boot(); safe if the markup is absent (e.g. stripped).
+    // Find the control container, render the active profile's layout into
+    // it, and start the repeat loop. Called once from main.js boot(); safe
+    // if the markup is absent (e.g. stripped).
     init() {
       const controls = document.getElementById('touch-controls');
       if (!controls) return this;
-      this._buttons = [];
-      for (const btn of controls.querySelectorAll('[data-action]')) {
-        this._buttons.push(btn);
-        btn.addEventListener('touchstart', (e) => {
-          e.preventDefault();
-          this._press(btn);
-          }, { passive: false });
-        btn.addEventListener('touchend', (e) => {
-          e.preventDefault();
-          this._release(btn.dataset.action);
-          }, { passive: false });
-        btn.addEventListener('touchcancel', () => {
-          this._release(btn.dataset.action);
-          });
-        }
+      this._controls = controls;
+      // Phase 27: the buttons are generated from the layout model (the static
+      // markup in index.html is the no-JS/default fallback and is replaced).
+      const layout = (T.UI && T.UI.layout) || (T.Layout && T.Layout.create());
+      if (layout) this.render(layout);
+      else this._bindExisting(controls);
        // The repeat loop mirrors input.js's rAF timer loop. It only runs
       // while something is held, so it costs nothing when idle.
       this._loopFn = (ts) => this._loop(ts);
       this._raf = requestAnimationFrame(this._loopFn);
       return this;
+      },
+
+    // Phase 27: (re)build the two thumb clusters from a layout. Each side is
+    // its own CSS grid sized to the bounding box of its buttons (see
+    // Layout.clusters), so an unused row costs no height. Called at boot and
+    // whenever the active profile's layout changes.
+    render(layout) {
+      const controls = this._controls || document.getElementById('touch-controls');
+      if (!controls || !T.Layout) return this;
+      this._controls = controls;
+      this._repeat = {};
+      this._buttons = [];
+      if (controls.replaceChildren) controls.replaceChildren();
+      else controls.innerHTML = '';
+      const clusters = T.Layout.clusters(layout);
+      for (const side of ['left', 'right']) {
+        const c = clusters[side];
+        if (!c) continue;
+        const el = document.createElement('div');
+        el.className = 'touch-cluster touch-' + side;
+        setStyle(el, 'gridTemplateColumns', 'repeat(' + c.cols + ', minmax(0, 1fr))');
+        setVar(el, '--cols', String(c.cols));
+        for (const it of c.items) {
+          const label = T.Layout.LABELS[it.action];
+          const btn = document.createElement('button');
+          btn.className = 'tbtn' + (label.primary ? ' tbtn-primary' : '') +
+                          (label.small ? ' tbtn-small' : '');
+          btn.dataset.action = it.action;
+          btn.setAttribute('aria-label', label.aria);
+          btn.setAttribute('type', 'button');
+          btn.textContent = label.text;
+          setStyle(btn, 'gridColumn', (it.c + 1) + ' / span ' + it.w);
+          setStyle(btn, 'gridRow', String(it.r + 1));
+          this._bindButton(btn);
+          el.appendChild(btn);
+          }
+        controls.appendChild(el);
+        }
+      return this;
+      },
+
+    // Fallback when the layout model isn't loaded: bind the static markup.
+    _bindExisting(controls) {
+      this._buttons = [];
+      for (const btn of controls.querySelectorAll('[data-action]')) this._bindButton(btn);
+      },
+
+    _bindButton(btn) {
+      this._buttons.push(btn);
+      btn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        this._press(btn);
+        }, { passive: false });
+      btn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        this._release(btn.dataset.action);
+        }, { passive: false });
+      btn.addEventListener('touchcancel', () => {
+        this._release(btn.dataset.action);
+        });
       },
 
     // Point at the live game (same lifecycle as Input.bind via ui.js).
